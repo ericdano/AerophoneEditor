@@ -24,6 +24,7 @@ Protocol research: `AE30_SYSEX_NOTES.md`. Cargo workspace in `rust/`.
 ## Gotchas
 
 - Raw vs value: `Param::get` returns `raw - vofs`; `encode` adds it back. Option lists index by value.
+- Bluetooth MIDI (macOS, via Audio MIDI Setup's Bluetooth panel) shows up as port "AE-30 Bluetooth"; read, stream, live edit, backup and GUI verified 2026-11-26 with the existing pacing. Stored-scene writes/restore not yet tried over Bluetooth.
 - The unit answers with device ID 7F (its identity reply), and the session adopts it.
 - Perf_midi_ctrl blocks are 45 bytes; RQ1 with Roland's documented 0x2E gets no reply. RQ1s must be exact whole blocks (`Image::missing_reads`).
 - `Session::read_area` (one RQ1 for a whole area) is only for the temporary scene/tones. Never use it, or `read_raw` with a large size, on stored scenes: the unit streams on through following scenes and ignores all other requests until finished (see notes §11). Stored scenes use `Session::read_blocks` (pipelined whole-block RQ1s); the backup does this.

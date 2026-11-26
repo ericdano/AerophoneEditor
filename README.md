@@ -1,6 +1,6 @@
 # RolandAerophoneEditor
 
-A scene and tone editor for the Roland Aerophone Pro AE-30 (and AE-20), written in Rust. It talks to the instrument over USB MIDI using Roland's SysEx protocol. Every change is sent to the AE-30 as you make it, so you hear it immediately.
+A scene and tone editor for the Roland Aerophone Pro AE-30 (and AE-20), written in Rust. It talks to the instrument over USB MIDI (or Bluetooth MIDI on macOS) using Roland's SysEx protocol. Every change is sent to the AE-30 as you make it, so you hear it immediately.
 
 Copyright © 2027 Eric Dannewitz. If you find it useful, you can [buy me a coffee](https://buymeacoffee.com/ericdannewitz).
 
@@ -57,6 +57,18 @@ Packages:
 ## Connecting the AE-30
 
 Connect it by USB. If your computer doesn't see it, install Roland's AE-30 USB driver or set the AE-30's USB driver mode to Generic. Close Roland's phone app while editing, so the two don't conflict. The editor finds the AE-30 automatically and reconnects if you unplug it.
+
+### Bluetooth (macOS)
+
+Bluetooth MIDI works on macOS, even though Roland only lists iOS for it. It is slower than USB, but loading, live editing and backups all work.
+
+1. Unplug the USB cable and turn on Bluetooth on the AE-30.
+2. Open **Audio MIDI Setup**, choose **Window → Show MIDI Studio**, and click the **Bluetooth** icon in the toolbar. (Pairing in System Settings → Bluetooth does not set up MIDI.)
+3. Find the AE-30 in the list and click **Connect**.
+
+The AE-30 then appears as "AE-30 Bluetooth", and the editor finds it automatically. If USB is also connected, the editor uses USB. To choose Bluetooth instead, start it with `--port Bluetooth`.
+
+Windows does not support Bluetooth MIDI devices through the standard MIDI system the editor uses, so connect by USB there.
 
 ## Protocol notes
 
