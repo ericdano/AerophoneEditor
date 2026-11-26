@@ -134,7 +134,7 @@ checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
 name = "ae30-app"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "ae30-core",
  "directories",
@@ -148,7 +148,7 @@ dependencies = [
 
 [[package]]
 name = "ae30-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "serde",
  "serde_json",

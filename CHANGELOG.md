@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## v0.2.0 — 2026-11-26
+
+This release adds restoring backups to the AE-30, and confirms on a real AE-30 that every store command works.
 
 ### Added
 
@@ -9,6 +11,18 @@
 ### Verified on the AE-30
 
 - Saving a part's tone to a user tone slot, and storing System settings, both survive a power cycle.
+
+### Installing
+
+- **macOS:** open the `.dmg` and drag the app to Applications, replacing the old version. The app isn't notarized yet, so the first time, Control-click it and choose **Open** (or go to System Settings ▸ Privacy & Security ▸ **Open Anyway**).
+- **Windows:** unzip and run `AE30PatchEditor.exe`. If SmartScreen appears, choose **More info ▸ Run anyway**.
+- Your settings and cached preset names carry over from v0.1.0.
+
+### Known limitations
+
+- The Windows build hasn't been tested on a Windows PC yet.
+- SuperNATURAL Acoustic tones and drum kits can be chosen but not edited inside, and Part 5's tone can't be edited.
+- Backups and restore cover user scenes, not user tones. A restored scene that uses a user tone plays whatever tone is in that slot now.
 
 ## v0.1.0 — 2026-11-25
 
