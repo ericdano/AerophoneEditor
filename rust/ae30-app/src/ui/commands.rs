@@ -49,6 +49,7 @@ pub enum Command {
     Import,
     Export,
     Backup,
+    Restore,
     Undo,
     Redo,
     PrevScene,
@@ -116,7 +117,7 @@ impl App {
             loaded: self.ed.scene.is_loaded(),
             can_undo: !self.ed.undo.is_empty(),
             can_redo: !self.ed.redo.is_empty(),
-            backing_up: self.ed.backup.is_some(),
+            backing_up: self.ed.backup.is_some() || self.ed.restore.is_some(),
             theme: self.prefs.theme,
             tab: self.view.tab,
         }
@@ -147,6 +148,16 @@ impl App {
             }
             Command::Backup if self.ed.is_online() && self.ed.backup.is_none() => {
                 self.view.backup_choice = true;
+            }
+            Command::Restore
+                if self.ed.is_online() && self.ed.backup.is_none() && self.ed.restore.is_none() =>
+            {
+                if let Some(path) = rfd::FileDialog::new()
+                    .add_filter("SysEx", &["syx"])
+                    .pick_file()
+                {
+                    self.open_restore(&path);
+                }
             }
             Command::Undo => self.ed.undo(),
             Command::Redo => self.ed.redo(),
@@ -186,7 +197,7 @@ impl App {
             }
             clicked
         };
-        let entries: [(bool, &str, Option<String>, Command); 9] = [
+        let entries: [(bool, &str, Option<String>, Command); 10] = [
             (
                 s.loaded,
                 "Save to User Scene…",
@@ -201,6 +212,12 @@ impl App {
                 None,
                 Command::Backup,
             ),
+            (
+                s.online && !s.backing_up,
+                "Restore Scenes…",
+                None,
+                Command::Restore,
+            ),
             (s.can_undo, "Undo", key("Z"), Command::Undo),
             (s.can_redo, "Redo", key("Y"), Command::Redo),
             (s.loaded, "Previous Scene", key("["), Command::PrevScene),
@@ -208,7 +225,7 @@ impl App {
             (s.online, "Reload from AE-30", key("R"), Command::Reload),
         ];
         for (i, (enabled, text, short, c)) in entries.into_iter().enumerate() {
-            if i == 4 || i == 6 {
+            if i == 5 || i == 7 {
                 ui.separator();
             }
             if item(ui, enabled, text, short) {

@@ -34,7 +34,7 @@ Copyright © 2027 Eric Dannewitz. If you find it useful, you can [buy me a coffe
   - searchable user and preset scene lists
   - saving to a user scene or user tone
   - import and export of `.syx` scene files
-  - a backup of user scenes to a single `.syx` file
+  - a backup of user scenes to a single `.syx` file, and restoring it with every scene checked
 - **Live:** breath and pitch bend meters, the playing note, and edits made on the AE-30's panel appear in the editor.
 - **Mac and Windows:** a native menu bar and unified title bar on macOS, and a menu in the window on Windows. Preferences cover theme, accent colour, corners, interface size and knob speed.
 

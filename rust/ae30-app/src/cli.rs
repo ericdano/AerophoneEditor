@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 use ae30_core::image::{Area, Image};
 use ae30_core::params::data;
 use ae30_core::session::{Event, Session};
-use ae30_core::sysex::{addr, Identity};
+use ae30_core::sysex::{addr, Addr, Identity};
 
 use crate::midi::{self, Link};
 
@@ -24,6 +24,10 @@ USAGE:
   ae30edit names [user|preset]           list scene names
   ae30edit read AA BB CC DD SIZE         hex-dump bytes (address and plain size in hex)
   ae30edit backup FILE.syx [FIRST LAST]  save user scenes FIRST..LAST (1-600) to a .syx file
+  ae30edit restore FILE.syx [SLOT] [--yes]
+                                         write a backup's scenes back to their user slots (or
+                                         one after another from SLOT, 1-600) and check each;
+                                         without --yes, only shows what would be written
   ae30edit stream-test                   time reading one scene with a single request
 
 Option: --port TEXT  use the MIDI port whose name contains TEXT
@@ -46,6 +50,11 @@ pub fn run(cmd: &str, args: &[String], port: Option<&str>) -> Result<(), String>
         "edit-test" => edit_test(&hints),
         "stream-log" => stream_log(&hints, args),
         "listen" => listen(&hints),
+        "restore" => restore(port, args),
+        "poke-temp" => poke_temp(&hints, args),
+        "poke-user" => poke_user(&hints, args),
+        "tone-names" => tone_names(&hints),
+        "system-set" => system_set(port, args),
         _ => Err(format!("unknown command \"{cmd}\"\n\n{USAGE}")),
     }
 }
@@ -468,5 +477,228 @@ fn listen(hints: &[&str]) -> Result<(), String> {
         std::thread::sleep(Duration::from_millis(5));
     }
     println!("{n} DT1 messages in 5 s, last at {last:?}");
+    Ok(())
+}
+
+/// Write scenes from a `.syx` file to user slots, checking each by reading it
+/// back. Without `--yes`, only lists what would happen.
+fn restore(port: Option<&str>, args: &[String]) -> Result<(), String> {
+    use crate::editor::{restore_plan, Conn, Editor};
+    let yes = args.iter().any(|a| a == "--yes");
+    let args: Vec<&String> = args.iter().filter(|a| *a != "--yes").collect();
+    let file = args
+        .first()
+        .ok_or("usage: ae30edit restore FILE.syx [SLOT] [--yes]")?;
+    let start = match args.get(1) {
+        Some(a) => Some(
+            a.parse::<u16>()
+                .ok()
+                .filter(|n| (1..=600).contains(n))
+                .ok_or(format!("bad slot {a} (1-600)"))?
+                - 1,
+        ),
+        None => None,
+    };
+    let bytes = std::fs::read(file.as_str()).map_err(|e| format!("{file}: {e}"))?;
+    let plan = restore_plan(ae30_core::syx::scenes_from_syx(&bytes), start)?;
+
+    let mut ed = Editor::new();
+    ed.connect(port, None);
+    let t = Instant::now();
+    while !(ed.is_online() && ed.scene.is_loaded() && !ed.is_loading()) {
+        let wait = ed.tick().unwrap_or(Duration::from_millis(5));
+        std::thread::sleep(wait.min(Duration::from_millis(2)));
+        if let Conn::Failed(e) = &ed.conn {
+            return Err(e.clone());
+        }
+        if t.elapsed() > Duration::from_secs(30) {
+            return Err("the AE-30 didn't finish loading".into());
+        }
+    }
+    let slot = |n: u16| format!("U{:02}-{:02}", n / 50 + 1, n % 50 + 1);
+    for (n, img) in &plan {
+        println!(
+            "{}  \"{}\"  replaces  \"{}\"",
+            slot(*n),
+            img.scene_name().unwrap_or_default(),
+            ed.user_names[usize::from(*n)]
+        );
+    }
+    if !yes {
+        println!(
+            "\n{} scenes would be written. Add --yes to write them.",
+            plan.len()
+        );
+        return Ok(());
+    }
+    ed.start_restore(plan);
+    let mut last = usize::MAX;
+    while ed.restore.is_some() {
+        let wait = ed.tick().unwrap_or(Duration::from_millis(5));
+        std::thread::sleep(wait.min(Duration::from_millis(2)));
+        if let Some(r) = &ed.restore {
+            let (done, total) = r.progress();
+            if done != last {
+                last = done;
+                println!(
+                    "{done}/{total} after {:.1}s",
+                    r.started.elapsed().as_secs_f32()
+                );
+            }
+        }
+        if let Conn::Failed(e) = &ed.conn {
+            return Err(e.clone());
+        }
+    }
+    // Let the return to the previous scene go out.
+    let t = Instant::now();
+    while t.elapsed() < Duration::from_secs(2) {
+        ed.tick();
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    match &ed.status {
+        Some((msg, _, false)) => {
+            println!("{msg}");
+            Ok(())
+        }
+        Some((msg, _, true)) => Err(msg.clone()),
+        None => Ok(()),
+    }
+}
+
+/// Experiment: write one byte into the Temporary Scene (`01 00 BB CC`) and
+/// read it back. Not stored. `poke-temp BB CC VALUE` (hex).
+fn poke_temp(hints: &[&str], args: &[String]) -> Result<(), String> {
+    let n: Vec<u8> = args
+        .iter()
+        .map(|a| u8::from_str_radix(a, 16))
+        .collect::<Result<_, _>>()
+        .map_err(|e| e.to_string())?;
+    let [b, c, v] = n[..] else {
+        return Err("usage: poke-temp BB CC VALUE (hex)".into());
+    };
+    let (mut link, mut s, _) = connect(hints)?;
+    let mut img = Image::new(Area::TempScene);
+    load(&mut link, &mut s, &mut img)?;
+    let at = addr(0x01, 0x00, b, c);
+    let before = img.blocks.iter().find_map(|bl| {
+        at.since(bl.addr)
+            .and_then(|o| bl.data.get(o as usize).copied())
+    });
+    s.write(at, &[v], false);
+    link.run(&mut s, LIMIT, |_, _| {})?;
+    let mut check = Image::new(Area::TempScene);
+    load(&mut link, &mut s, &mut check)?;
+    let after = check.blocks.iter().find_map(|bl| {
+        at.since(bl.addr)
+            .and_then(|o| bl.data.get(o as usize).copied())
+    });
+    println!("{at}: was {before:02X?}, wrote {v:02X}, reads {after:02X?}");
+    Ok(())
+}
+
+/// Experiment: DT1 one byte straight into stored user scene SLOT (1-600) at
+/// block offset `BB CC`, then read the whole block back. `poke-user SLOT BB CC VALUE`.
+fn poke_user(hints: &[&str], args: &[String]) -> Result<(), String> {
+    let slot: u16 = args
+        .first()
+        .and_then(|a| a.parse().ok())
+        .filter(|n| (1..=600).contains(n))
+        .ok_or("bad slot")?;
+    let n: Vec<u8> = args[1..]
+        .iter()
+        .map(|a| u8::from_str_radix(a, 16))
+        .collect::<Result<_, _>>()
+        .map_err(|e| e.to_string())?;
+    let [b, c, v] = n[..] else {
+        return Err("usage: poke-user SLOT BB CC VALUE (hex)".into());
+    };
+    let area = Area::UserScene(slot - 1);
+    let (mut link, mut s, _) = connect(hints)?;
+    let at = Addr(area.base().0 + ((b as u32) << 7) + c as u32);
+    let mut img = Image::new(area);
+    s.read_blocks(0, img.missing_reads());
+    link.run(&mut s, LIMIT, |_, ev| {
+        if let Event::Data { addr, data } = ev {
+            img.apply(addr, &data);
+        }
+    })?;
+    let get = |img: &Image| {
+        img.blocks.iter().find_map(|bl| {
+            at.since(bl.addr)
+                .and_then(|o| bl.data.get(o as usize).copied())
+        })
+    };
+    let before = get(&img);
+    s.write(at, &[v], false);
+    link.run(&mut s, LIMIT, |_, _| {})?;
+    std::thread::sleep(Duration::from_millis(500));
+    let mut check = Image::new(area);
+    s.read_blocks(0, check.missing_reads());
+    link.run(&mut s, LIMIT, |_, ev| {
+        if let Event::Data { addr, data } = ev {
+            check.apply(addr, &data);
+        }
+    })?;
+    println!(
+        "{at}: was {before:02X?}, wrote {v:02X}, reads {:02X?}",
+        get(&check)
+    );
+    Ok(())
+}
+
+/// List the user tone names (non-empty ones).
+fn tone_names(hints: &[&str]) -> Result<(), String> {
+    let (mut link, mut s, _) = connect(hints)?;
+    s.list_user_tones();
+    let mut names = None;
+    link.run(&mut s, Duration::from_secs(10), |_, ev| {
+        if let Event::UserToneNames(n) = ev {
+            names = Some(n);
+        }
+    })?;
+    let names = names.ok_or("no tone list")?;
+    for (i, n) in names.iter().enumerate() {
+        if !n.is_empty() && n != "INIT TONE" {
+            println!("{:3} {n}", i + 1);
+        }
+    }
+    Ok(())
+}
+
+/// Set one System setting by its label and store System settings:
+/// `system-set "Display Contrast" 3`.
+fn system_set(port: Option<&str>, args: &[String]) -> Result<(), String> {
+    use crate::editor::{Conn, Editor, Target};
+    let [label, value] = args else {
+        return Err("usage: system-set LABEL VALUE".into());
+    };
+    let value: i32 = value.parse().map_err(|_| "bad value")?;
+    let p = ae30_core::data()
+        .table("Sys_common")
+        .named(label)
+        .ok_or(format!("no System setting called {label}"))?;
+    let mut ed = Editor::new();
+    ed.connect(port, None);
+    let t = Instant::now();
+    while ed.value(Target::System, "Sys_common", p).is_none() {
+        let wait = ed.tick().unwrap_or(Duration::from_millis(5));
+        std::thread::sleep(wait.min(Duration::from_millis(2)));
+        if let Conn::Failed(e) = &ed.conn {
+            return Err(e.clone());
+        }
+        if t.elapsed() > Duration::from_secs(30) {
+            return Err("System settings didn't load".into());
+        }
+    }
+    let before = ed.value(Target::System, "Sys_common", p).unwrap();
+    ed.set(Target::System, "Sys_common", p, value);
+    ed.session.write_system();
+    let t = Instant::now();
+    while t.elapsed() < Duration::from_secs(2) {
+        ed.tick();
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    println!("{label}: {} -> {} (stored)", p.show(before), p.show(value));
     Ok(())
 }

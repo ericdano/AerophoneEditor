@@ -391,6 +391,18 @@ Back up all 600 user scenes (read-only RQ1 sweep) before any write testing.
   presets (394 scenes) in ~9 s. The unit doesn't always send the all-zero terminator, so finish on count or idle gap.
 - DT1 to the Temporary Scene takes effect and reads back (Part 1 level 100 → 99 → 100).
 - **Scene write `0F 00 10 01` works on the AE-30** (tested from the editor's Save dialog, 2026-11-25).
-- Not yet tested: tone write (`0F 00 10 05+`) and system write (`0F 00 10 00`).
+- **Tone write `0F 00 10 05 + 4·(part−1)` works**: Part 1's tone stored to user tone 76 showed in the tone list at
+  once and after a power cycle (2026-11-26).
+- **System write `0F 00 10 00` works**: Display Contrast 3 → 4, stored, survived a power cycle, then set back.
+- **DT1 straight into a stored user scene (`40 xx …`) works and survives a power cycle** (tested on one byte of
+  a test slot). The editor's restore still stores through the Temporary Scene + scene write (the AE-30's own
+  path) and only uses direct writes to put back values the store changed.
+- **The scene write isn't byte-exact.** Seen when restoring and reading back:
+  - Mono/Poly "Tone" (2) in Parts 3–5 sometimes stored as "Poly" (1); the Temporary Scene itself accepts 2.
+  - Parameters of effects set to Thru/Off (type 0) are rewritten with the unit's own defaults, even after a
+    direct write (e.g. factory INIT scenes hold zeros there).
+  Restore therefore patches real differences directly, re-checks, and ignores unused-effect parameters and
+  out-of-range values.
+- Writing a scene through the Temporary Scene + store + read-back takes about 2.7–3.5 s per scene.
 - The unit sends pitch bend (from bite/wheel), CC2/CC11 breath and notes on USB while played; the editor's
   status bar shows breath and bend from these.

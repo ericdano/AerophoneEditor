@@ -24,6 +24,7 @@ const TAG_SCENE: u64 = 2;
 const TAG_SYSTEM: u64 = 3;
 const TAG_TONE: u64 = 10; // + part
 const TAG_BACKUP: u64 = 100;
+const TAG_RESTORE: u64 = 200;
 
 /// Edits to the same setting this close together undo as one step.
 const UNDO_MERGE: Duration = Duration::from_millis(1200);
@@ -120,6 +121,158 @@ impl Backup {
     }
 }
 
+/// Writing scenes back to user slots, each checked by reading it back.
+///
+/// Per scene: its blocks go to the Temporary Scene (DT1), the scene-write
+/// command stores it in the target slot, then the slot is read back block
+/// by block and compared byte for byte with what was sent.
+#[derive(Debug)]
+pub struct Restore {
+    /// (target user scene 0..600, scene data), in order.
+    pub items: Vec<(u16, Image)>,
+    pub next: usize,
+    verify: Option<Image>,
+    retried: bool,
+    /// The read-back differed and the differences were written directly
+    /// into the stored scene; this read-back is the second check.
+    patched: bool,
+    /// Bytes the store command changed and the patch put right.
+    pub patched_bytes: usize,
+    /// Values invalid in the file that the AE-30 replaced with valid ones.
+    pub corrected: usize,
+    /// Target slots whose read-back didn't match, with the first differing block.
+    pub failed: Vec<(u16, String)>,
+    pub started: Instant,
+    /// The scene the AE-30 was on before, to return to afterwards.
+    return_to: Option<(u8, u8, u8)>,
+}
+
+impl Restore {
+    /// (scenes finished, scenes to write)
+    pub fn progress(&self) -> (usize, usize) {
+        (self.next, self.items.len())
+    }
+
+    pub fn eta(&self) -> Option<Duration> {
+        let (done, total) = self.progress();
+        (done >= 2).then(|| {
+            self.started
+                .elapsed()
+                .mul_f64((total - done) as f64 / done as f64)
+        })
+    }
+}
+
+/// Where each scene in a `.syx` file goes: backed-up user scenes return to
+/// their own slots, unless `start` (0-based) is given, which places the
+/// scenes one after another from that slot. Single scene files (addressed to
+/// the Temporary Scene) need `start`.
+pub fn restore_plan(
+    file: Vec<(Area, Image)>,
+    start: Option<u16>,
+) -> Result<Vec<(u16, Image)>, String> {
+    let mut out = Vec::new();
+    for (i, (area, img)) in file.into_iter().enumerate() {
+        if !img.is_loaded() {
+            return Err(format!("scene {} in the file is incomplete", i + 1));
+        }
+        let slot = match (start, area) {
+            (Some(s), _) => s + i as u16,
+            (None, Area::UserScene(n)) => n,
+            (None, _) => {
+                return Err("this file isn't a user-scene backup: choose a slot to start at".into())
+            }
+        };
+        if slot >= 600 {
+            return Err(format!(
+                "not enough slots: scene {} would go past U12-50",
+                i + 1
+            ));
+        }
+        out.push((slot, img));
+    }
+    Ok(out)
+}
+
+/// Whether a byte of a written block is one the AE-30 may rewrite as it
+/// takes the data, without changing the sound, so a read-back difference
+/// there isn't an error:
+/// - values outside their documented range, which it replaces with valid ones;
+/// - parameters of an effect whose type is Thru/Off (type 0), which it
+///   resets to its own defaults (seen in factory INIT scenes).
+fn invalid_in_file(b: &ae30_core::image::Block, off: usize) -> bool {
+    let Some(p) = b
+        .table
+        .params
+        .iter()
+        .filter(|p| p.fx.is_none())
+        .find(|p| (p.off as usize..p.off as usize + p.len()).contains(&off))
+    else {
+        return false;
+    };
+    let type_off = match b.entry.table.as_str() {
+        "Perf_mfx" | "Perf_ifx" | "PCMEX_mfx" => Some(0),
+        "Perf_cho" | "Perf_dly" | "Perf_rev" => Some(1),
+        _ => None,
+    };
+    if p.generic && type_off.is_some_and(|t| b.data.get(t) == Some(&0)) {
+        return true;
+    }
+    p.raw(&b.data)
+        .is_some_and(|raw| raw < p.min + p.vofs || raw > p.max.max(p.min) + p.vofs)
+}
+
+/// Bytes where a read-back differs from what was written, as
+/// (block index, offset), leaving out values that were invalid in the file.
+pub fn differences(written: &Image, read: &Image) -> Vec<(usize, usize)> {
+    let mut out = Vec::new();
+    for (k, (w, r)) in written.blocks.iter().zip(&read.blocks).enumerate() {
+        if !w.is_loaded() {
+            continue;
+        }
+        for (i, (a, b)) in w.data.iter().zip(&r.data).enumerate() {
+            if (!r.is_loaded() || a != b) && !invalid_in_file(w, i) {
+                out.push((k, i));
+            }
+        }
+    }
+    out
+}
+
+/// How many bytes differ only because the file held invalid values.
+pub fn corrected_by_unit(written: &Image, read: &Image) -> usize {
+    written
+        .blocks
+        .iter()
+        .zip(&read.blocks)
+        .filter(|(w, r)| w.is_loaded() && r.is_loaded())
+        .map(|(w, r)| {
+            w.data
+                .iter()
+                .zip(&r.data)
+                .enumerate()
+                .filter(|&(i, (a, b))| a != b && invalid_in_file(w, i))
+                .count()
+        })
+        .sum()
+}
+
+/// A readable description of the first real difference, if any.
+pub fn first_difference(written: &Image, read: &Image) -> Option<String> {
+    let (k, i) = *differences(written, read).first()?;
+    let (w, r) = (&written.blocks[k], &read.blocks[k]);
+    Some(if !r.is_loaded() {
+        format!("{} not read back", w.name())
+    } else {
+        format!(
+            "{} byte {i:#04x}: wrote {:02X}, read {:02X}",
+            w.name(),
+            w.data[i],
+            r.data[i]
+        )
+    })
+}
+
 pub struct Editor {
     link: Option<Link>,
     pub session: Session,
@@ -140,6 +293,7 @@ pub struct Editor {
     pub dirty: bool,
     pub status: Option<(String, Instant, bool)>,
     pub backup: Option<Backup>,
+    pub restore: Option<Restore>,
     /// Breath controller value and when it last moved (from the unit's MIDI out).
     pub breath: (u8, Instant),
     pub note: Option<u8>,
@@ -178,6 +332,7 @@ impl Editor {
             dirty: false,
             status: None,
             backup: None,
+            restore: None,
             breath: (0, now),
             note: None,
             bend: (0, now),
@@ -214,6 +369,7 @@ impl Editor {
         self.pending.clear();
         self.conn = Conn::Offline;
         self.backup = None;
+        self.restore = None;
     }
 
     pub fn is_online(&self) -> bool {
@@ -345,6 +501,7 @@ impl Editor {
                     TAG_SYSTEM => self.finish_image(TAG_SYSTEM),
                     t if (TAG_TONE + 1..=TAG_TONE + 4).contains(&t) => self.finish_image(t),
                     TAG_BACKUP => self.backup_next(),
+                    TAG_RESTORE => self.restore_check(),
                     _ => {}
                 }
             }
@@ -375,9 +532,17 @@ impl Editor {
 
     /// Place incoming data, and react to changes made on the instrument.
     fn data(&mut self, addr: Addr, bytes: &[u8], now: Instant) {
+        // While restoring, the Temporary Scene is a staging area: don't
+        // reload it (that would interleave reads with the writes).
+        let restoring = self.restore.is_some();
+        if let Some(r) = &mut self.restore {
+            if let Some(v) = &mut r.verify {
+                v.apply(addr, bytes);
+            }
+        }
         let before = self.current_scene();
         self.setup.apply(addr, bytes);
-        if self.setup.is_loaded() {
+        if self.setup.is_loaded() && !restoring {
             let after = self.current_scene();
             if before.is_some() && after != before {
                 // The scene was changed on the instrument (or by us).
@@ -386,7 +551,7 @@ impl Editor {
             }
         }
         let tone_before: Vec<_> = (1..=4).map(|p| self.part_tone(p)).collect();
-        if !self.scene.apply(addr, bytes).is_empty() && self.scene.is_loaded() {
+        if !self.scene.apply(addr, bytes).is_empty() && self.scene.is_loaded() && !restoring {
             for p in 1..=4u8 {
                 if self.part_tone(p) != tone_before[usize::from(p - 1)] {
                     self.tone_reload[usize::from(p - 1)] = Some(now + SETTLE);
@@ -807,6 +972,174 @@ impl Editor {
         ));
     }
 
+    // ---- restore -----------------------------------------------------------
+
+    /// Write `items` (target user scene 0..600, scene) to the AE-30, checking
+    /// each by reading it back. Uses the Temporary Scene as a staging area,
+    /// so unsaved edits there are lost.
+    pub fn start_restore(&mut self, items: Vec<(u16, Image)>) {
+        if items.is_empty() {
+            return self.warn("No scenes to restore.");
+        }
+        if self.backup.is_some() {
+            return self.warn("Wait for the backup to finish first.");
+        }
+        let return_to = self
+            .setup
+            .blocks
+            .first()
+            .filter(|b| b.is_loaded())
+            .map(|b| (b.data[0], b.data[1], b.data[2]));
+        self.scene_reload = None;
+        self.tone_reload = [None; 4];
+        self.restore = Some(Restore {
+            items,
+            next: 0,
+            verify: None,
+            retried: false,
+            patched: false,
+            patched_bytes: 0,
+            corrected: 0,
+            failed: Vec::new(),
+            started: Instant::now(),
+            return_to,
+        });
+        self.restore_next();
+    }
+
+    pub fn cancel_restore(&mut self) {
+        if let Some(r) = &self.restore {
+            let done = r.next;
+            self.session.cancel_reads(|t| t != TAG_RESTORE);
+            self.session.abort(TAG_RESTORE);
+            self.pending.remove(&TAG_RESTORE);
+            self.finish_restore();
+            self.warn(format!("Restore stopped after {done} scenes"));
+        }
+    }
+
+    fn restore_next(&mut self) {
+        let Some(r) = &mut self.restore else { return };
+        let Some((slot, img)) = r.items.get(r.next) else {
+            return self.finish_restore();
+        };
+        let slot = *slot;
+        // 1. Stage the scene in the Temporary Scene.
+        let staged = img.retarget(Area::TempScene);
+        for b in staged.blocks.iter().filter(|b| b.is_loaded()) {
+            self.session.write(b.addr, &b.data, false);
+        }
+        // 2. Store it.
+        self.session.write_scene(slot);
+        // 3. Read the slot back (sent after the writes; the unit answers in order).
+        let verify = Image::new(Area::UserScene(slot));
+        let reads = verify.missing_reads();
+        r.verify = Some(verify);
+        r.retried = false;
+        r.patched = false;
+        self.session.read_blocks(TAG_RESTORE, reads);
+        self.pending.insert(TAG_RESTORE, 1);
+    }
+
+    fn restore_check(&mut self) {
+        let Some(r) = &mut self.restore else { return };
+        let (slot, written) = &r.items[r.next];
+        let slot = *slot;
+        let v = r.verify.as_ref().unwrap();
+        if !v.is_loaded() && !r.retried {
+            r.retried = true;
+            let reads = v.missing_reads();
+            self.session.read_blocks(TAG_RESTORE, reads);
+            self.pending.insert(TAG_RESTORE, 1);
+            return;
+        }
+        if let Some(diff) = first_difference(written, v) {
+            if !r.patched && v.is_loaded() {
+                // The AE-30's store command changes a few values (Mono/Poly
+                // "Tone" becomes "Poly" in parts 3-5). Write the differing
+                // bytes straight into the stored scene (Roland's map allows
+                // DT1 to user scenes; tested to survive power-off), then
+                // check again.
+                let patches: Vec<(Addr, u8)> = differences(written, v)
+                    .into_iter()
+                    .map(|(k, i)| {
+                        (
+                            Addr(v.blocks[k].addr.0 + i as u32),
+                            written.blocks[k].data[i],
+                        )
+                    })
+                    .collect();
+                r.patched = true;
+                r.patched_bytes += patches.len();
+                for (a, b) in patches {
+                    self.session.write(a, &[b], false);
+                }
+                let again = Image::new(Area::UserScene(slot));
+                let reads = again.missing_reads();
+                r.verify = Some(again);
+                self.session.read_blocks(TAG_RESTORE, reads);
+                self.pending.insert(TAG_RESTORE, 1);
+                return;
+            }
+            r.failed.push((slot, diff));
+        }
+        r.corrected += corrected_by_unit(written, r.verify.as_ref().unwrap());
+        if let Some(name) = written.scene_name() {
+            self.user_names[usize::from(slot)] = name;
+        }
+        r.next += 1;
+        r.verify = None;
+        self.restore_next();
+    }
+
+    fn finish_restore(&mut self) {
+        let Some(r) = self.restore.take() else { return };
+        let secs = r.started.elapsed().as_secs();
+        if r.failed.is_empty() {
+            let mut notes = Vec::new();
+            if r.patched_bytes > 0 {
+                notes.push(format!(
+                    "{} values the AE-30 changed on saving were put back",
+                    r.patched_bytes
+                ));
+            }
+            if r.corrected > 0 {
+                notes.push(format!(
+                    "{} settings of unused effects or out-of-range values were set by the AE-30 itself",
+                    r.corrected
+                ));
+            }
+            let fixed = if notes.is_empty() {
+                String::new()
+            } else {
+                format!(" ({})", notes.join("; "))
+            };
+            self.tell(format!(
+                "Restored and checked {} scenes in {}:{:02}{fixed}",
+                r.next,
+                secs / 60,
+                secs % 60
+            ));
+        } else {
+            let (slot, why) = &r.failed[0];
+            self.warn(format!(
+                "Restored {} scenes; {} didn't read back the same (first: {:03}, {why})",
+                r.next,
+                r.failed.len(),
+                slot + 1
+            ));
+        }
+        // Back to the scene the AE-30 was on (this also reloads the editor).
+        match r.return_to {
+            Some((m, l, p)) => {
+                self.session.select_scene(m, l, p);
+                self.scene_reload = Some(Instant::now() + SETTLE);
+            }
+            None => self.load_scene(),
+        }
+        self.dirty = false;
+    }
+
     // ---- backup ------------------------------------------------------------
 
     /// Back up user scenes `want` (0-based) to `path`.
@@ -946,4 +1279,65 @@ fn save_preset_cache(list: &[SceneName]) {
         .map(|s| format!("{}\t{}\t{}\t{}\n", s.msb, s.lsb, s.pc, s.name))
         .collect();
     let _ = std::fs::write(p, text);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn filled(area: Area, v: u8) -> Image {
+        let mut img = Image::new(area);
+        for (a, n) in img.missing_reads() {
+            img.apply(a, &vec![v; n as usize]);
+        }
+        img
+    }
+
+    #[test]
+    fn restore_plan_places_scenes() {
+        let file = vec![
+            (Area::UserScene(7), filled(Area::UserScene(7), 64)),
+            (Area::UserScene(9), filled(Area::UserScene(9), 64)),
+        ];
+        let own: Vec<u16> = restore_plan(file.clone(), None)
+            .unwrap()
+            .iter()
+            .map(|x| x.0)
+            .collect();
+        assert_eq!(own, [7, 9]);
+        let moved: Vec<u16> = restore_plan(file, Some(100))
+            .unwrap()
+            .iter()
+            .map(|x| x.0)
+            .collect();
+        assert_eq!(moved, [100, 101]);
+        let single = vec![(Area::TempScene, filled(Area::TempScene, 64))];
+        assert!(restore_plan(single.clone(), None).is_err());
+        assert!(restore_plan(single, Some(599)).is_ok());
+        let two = vec![
+            (Area::TempScene, filled(Area::TempScene, 64)),
+            (Area::TempScene, filled(Area::TempScene, 64)),
+        ];
+        assert!(restore_plan(two, Some(599)).is_err(), "runs past U12-50");
+    }
+
+    #[test]
+    fn checking_ignores_what_the_unit_sets_itself() {
+        let mut written = filled(Area::UserScene(0), 64);
+        let i = written.index("Perf_mfx_1").unwrap();
+        written.blocks[i].data[0] = 0; // MFX type Thru
+        let mut read = written.clone();
+        // Unused effect parameters rewritten by the unit: not a difference.
+        read.blocks[i].data[0x16] = 0x0F;
+        assert!(differences(&written, &read).is_empty());
+        assert_eq!(corrected_by_unit(&written, &read), 1);
+        // A real change elsewhere is.
+        let p = read.index("Perf_part_3").unwrap();
+        read.blocks[p].data[0x24] = 1;
+        written.blocks[p].data[0x24] = 2;
+        assert_eq!(differences(&written, &read), [(p, 0x24)]);
+        assert!(first_difference(&written, &read)
+            .unwrap()
+            .contains("Perf_part_3"));
+    }
 }

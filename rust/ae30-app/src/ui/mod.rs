@@ -46,6 +46,17 @@ pub struct SaveScene {
     pub name: String,
 }
 
+/// The Restore Scenes window: what a chosen `.syx` file holds and where it goes.
+pub struct RestoreUi {
+    pub file: String,
+    pub scenes: Vec<(ae30_core::Area, ae30_core::Image)>,
+    pub selected: Vec<bool>,
+    /// Put backed-up user scenes back in their own slots.
+    pub original: bool,
+    /// Otherwise, the first slot (0-based).
+    pub start: u16,
+}
+
 pub struct SaveTone {
     pub part: u8,
     pub slot: u16,
@@ -70,6 +81,7 @@ pub struct View {
     pub lib_search: String,
     pub port: Option<String>,
     pub backup_choice: bool,
+    pub restore: Option<RestoreUi>,
     pub about: bool,
     pub prefs: bool,
 }
@@ -93,6 +105,7 @@ impl Default for View {
             lib_search: String::new(),
             port: None,
             backup_choice: false,
+            restore: None,
             about: false,
             prefs: false,
         }
@@ -498,6 +511,16 @@ impl App {
             {
                 run = Some(Command::Backup);
             }
+            if ui
+                .add_enabled(
+                    online && self.ed.backup.is_none() && self.ed.restore.is_none(),
+                    egui::Button::new("Restore…"),
+                )
+                .on_hover_text("Write scenes from a .syx backup back to the AE-30")
+                .clicked()
+            {
+                run = Some(Command::Restore);
+            }
         });
         if let Some(c) = run {
             self.run_command(&ctx, c);
@@ -525,14 +548,20 @@ impl App {
             if self.ed.is_loading() {
                 ui.spinner();
             }
-            if let Some(b) = &self.ed.backup {
-                let (done, total) = b.progress();
-                let eta = b
-                    .eta()
+            let job = if let Some(b) = &self.ed.backup {
+                Some(("Backup", b.progress(), b.eta(), true))
+            } else {
+                self.ed
+                    .restore
+                    .as_ref()
+                    .map(|r| ("Restoring", r.progress(), r.eta(), false))
+            };
+            if let Some((what, (done, total), eta, backup)) = job {
+                let eta = eta
                     .map(|d| format!(", ~{}:{:02} left", d.as_secs() / 60, d.as_secs() % 60))
                     .unwrap_or_default();
                 // Bar and text drawn separately, so the text is always in
-                // the theme's text colour (the bar's own label wasn't readable).
+                // the theme's text colour.
                 ui.separator();
                 let (rect, _) = ui.allocate_exact_size(vec2(120.0, 8.0), Sense::hover());
                 ui.painter().rect_filled(rect, 4.0, pal.control);
@@ -540,12 +569,16 @@ impl App {
                 fill.set_width(rect.width() * done as f32 / total.max(1) as f32);
                 ui.painter().rect_filled(fill, 4.0, pal.accent);
                 ui.label(
-                    RichText::new(format!("Backup {done}/{total}{eta}"))
+                    RichText::new(format!("{what} {done}/{total}{eta}"))
                         .size(12.0)
                         .color(pal.text),
                 );
                 if ui.small_button("Cancel").clicked() {
-                    self.ed.cancel_backup();
+                    if backup {
+                        self.ed.cancel_backup();
+                    } else {
+                        self.ed.cancel_restore();
+                    }
                 }
             }
             if let Some((msg, at, warn)) = &self.ed.status {
@@ -757,6 +790,204 @@ impl App {
             });
         if !open {
             self.view.tone_picker = None;
+        }
+    }
+
+    /// Read a `.syx` file and open the Restore window for it.
+    pub fn open_restore(&mut self, path: &std::path::Path) {
+        let bytes = match std::fs::read(path) {
+            Ok(b) => b,
+            Err(e) => {
+                return self
+                    .ed
+                    .warn(format!("Couldn't read {}: {e}", path.display()))
+            }
+        };
+        let scenes: Vec<_> = ae30_core::syx::scenes_from_syx(&bytes)
+            .into_iter()
+            .filter(|(_, img)| img.is_loaded())
+            .collect();
+        if scenes.is_empty() {
+            return self
+                .ed
+                .warn("That file has no complete AE-30 scenes in it.");
+        }
+        let original = scenes
+            .iter()
+            .all(|(a, _)| matches!(a, ae30_core::Area::UserScene(_)));
+        let start = self
+            .ed
+            .user_names
+            .iter()
+            .position(|n| n == "INIT SCENE")
+            .unwrap_or(0) as u16;
+        self.view.restore = Some(RestoreUi {
+            file: path
+                .file_name()
+                .map(|f| f.to_string_lossy().into_owned())
+                .unwrap_or_default(),
+            selected: vec![true; scenes.len()],
+            scenes,
+            original,
+            start,
+        });
+    }
+
+    fn restore_dialog(&mut self, ctx: &egui::Context) {
+        let Some(st) = &mut self.view.restore else {
+            return;
+        };
+        let mut close = false;
+        let mut go = false;
+        // Where each selected scene would go.
+        let targets: Vec<Option<u16>> = {
+            let mut k = 0u16;
+            st.scenes
+                .iter()
+                .zip(&st.selected)
+                .map(|((area, _), &sel)| {
+                    if !sel {
+                        return None;
+                    }
+                    let t = match (st.original, area) {
+                        (true, ae30_core::Area::UserScene(n)) => Some(*n),
+                        _ => Some(st.start + k),
+                    };
+                    k += 1;
+                    t.filter(|&t| t < 600)
+                })
+                .collect()
+        };
+        let count = targets.iter().flatten().count();
+        let overflow = st.selected.iter().filter(|&&s| s).count() > count;
+        let overwrites = targets
+            .iter()
+            .flatten()
+            .filter(|&&t| {
+                let n = &self.ed.user_names[usize::from(t)];
+                !n.is_empty() && n != "INIT SCENE"
+            })
+            .count();
+        let can_original = st
+            .scenes
+            .iter()
+            .all(|(a, _)| matches!(a, ae30_core::Area::UserScene(_)));
+        egui::Modal::new(egui::Id::unique("restore")).show(ctx, |ui| {
+            let pal = palette(ui);
+            ui.set_width(560.0);
+            ui.label(theme::title("Restore Scenes", 19.0));
+            ui.label(
+                RichText::new(format!("{} — {} scenes", st.file, st.scenes.len())).color(pal.weak),
+            );
+            ui.add_space(8.0);
+            if can_original {
+                ui.radio_value(&mut st.original, true, "Put each scene back in its own slot");
+            }
+            ui.horizontal(|ui| {
+                ui.radio_value(&mut st.original, false, "Place them one after another from");
+                let mut slot = i32::from(st.start) + 1;
+                ui.add_enabled(
+                    !st.original,
+                    egui::DragValue::new(&mut slot)
+                        .range(1..=600)
+                        .custom_formatter(|v, _| {
+                            let n = v as u16 - 1;
+                            format!("U{:02}-{:02}", n / 50 + 1, n % 50 + 1)
+                        })
+                        .custom_parser(|t| {
+                            let t = t.trim().trim_start_matches(['U', 'u']);
+                            match t.split_once('-') {
+                                Some((b, s)) => {
+                                    let (b, s): (f64, f64) = (b.parse().ok()?, s.parse().ok()?);
+                                    Some((b - 1.0) * 50.0 + s)
+                                }
+                                None => t.parse().ok(),
+                            }
+                        }),
+                );
+                st.start = (slot - 1).clamp(0, 599) as u16;
+            });
+            if !can_original {
+                st.original = false;
+            }
+            ui.add_space(6.0);
+            ui.horizontal(|ui| {
+                if ui.small_button("Select all").clicked() {
+                    st.selected.iter_mut().for_each(|s| *s = true);
+                }
+                if ui.small_button("Select none").clicked() {
+                    st.selected.iter_mut().for_each(|s| *s = false);
+                }
+            });
+            egui::ScrollArea::vertical()
+                .max_height(320.0)
+                .auto_shrink([false, false])
+                .show_rows(ui, 24.0, st.scenes.len(), |ui, range| {
+                    for i in range {
+                        ui.horizontal(|ui| {
+                            ui.set_height(24.0);
+                            ui.checkbox(&mut st.selected[i], "");
+                            let name = st.scenes[i].1.scene_name().unwrap_or_default();
+                            match targets[i] {
+                                Some(t) => {
+                                    let old = &self.ed.user_names[usize::from(t)];
+                                    let empty = old.is_empty() || old == "INIT SCENE";
+                                    ui.label(
+                                        RichText::new(format!("U{:02}-{:02}", t / 50 + 1, t % 50 + 1))
+                                            .color(pal.accent),
+                                    );
+                                    ui.label(&name);
+                                    let note = if empty {
+                                        RichText::new("into an empty slot").size(11.5).color(pal.weak)
+                                    } else if *old == name {
+                                        RichText::new("same name there now").size(11.5).color(pal.weak)
+                                    } else {
+                                        RichText::new(format!("replaces \"{old}\"")).size(11.5).color(pal.amber)
+                                    };
+                                    ui.label(note);
+                                }
+                                None => {
+                                    ui.label(RichText::new(&name).color(pal.weak));
+                                }
+                            }
+                        });
+                    }
+                });
+            ui.add_space(6.0);
+            if overflow {
+                ui.label(RichText::new("Some scenes don't fit before U12-50 and will be skipped.").color(pal.amber));
+            }
+            let mut warn = format!(
+                "This writes {count} scene{} to the AE-30",
+                if count == 1 { "" } else { "s" }
+            );
+            if overwrites > 0 {
+                warn += &format!(", replacing {overwrites} named scene{}", if overwrites == 1 { "" } else { "s" });
+            }
+            warn += ". Each one is read back and checked. The current scene's unsaved edits are lost. About 3 seconds per scene.";
+            ui.label(RichText::new(warn).size(12.0).color(if overwrites > 0 { pal.amber } else { pal.weak }));
+            ui.add_space(8.0);
+            ui.horizontal(|ui| {
+                let label = format!("Restore {count} Scene{}", if count == 1 { "" } else { "s" });
+                if ui.add_enabled(count > 0, theme::primary(ui, &label)).clicked() {
+                    go = true;
+                }
+                if ui.button("Cancel").clicked() {
+                    close = true;
+                }
+            });
+        });
+        if go {
+            let st = self.view.restore.take().unwrap();
+            let items: Vec<(u16, ae30_core::Image)> = st
+                .scenes
+                .into_iter()
+                .zip(targets)
+                .filter_map(|((_, img), t)| t.map(|t| (t, img)))
+                .collect();
+            self.ed.start_restore(items);
+        } else if close {
+            self.view.restore = None;
         }
     }
 
@@ -1145,6 +1376,13 @@ impl App {
 
 impl App {
     fn screenshot(&mut self, ctx: &egui::Context) {
+        if self.shot.as_ref().is_some_and(|s| !s.2) {
+            if let Ok(f) = std::env::var("AE30_RESTORE") {
+                if self.view.restore.is_none() && self.ed.scene.is_loaded() {
+                    self.open_restore(std::path::Path::new(&f));
+                }
+            }
+        }
         let Some((path, at, requested)) = &mut self.shot else {
             return;
         };
@@ -1351,6 +1589,7 @@ impl eframe::App for App {
         self.tone_picker(&ctx);
         self.save_scene_dialog(&ctx);
         self.backup_dialog(&ctx);
+        self.restore_dialog(&ctx);
         self.save_tone_dialog(&ctx);
         self.about_dialog(&ctx);
         self.preferences_window(&ctx);

@@ -26,6 +26,7 @@ pub struct NativeMenu {
     undo: MenuItem,
     redo: MenuItem,
     backup: MenuItem,
+    restore: MenuItem,
     connect: MenuItem,
     themes: Vec<(ThemeChoice, CheckMenuItem)>,
     tabs: Vec<(super::Tab, CheckMenuItem)>,
@@ -57,6 +58,7 @@ impl NativeMenu {
         let import = item("Import Scene…", Command::Import, key(Code::KeyO));
         let export = item("Export Scene…", Command::Export, key(Code::KeyE));
         let backup = item("Back Up User Scenes…", Command::Backup, None);
+        let restore = item("Restore Scenes…", Command::Restore, None);
 
         let undo = item("Undo", Command::Undo, key(Code::KeyZ));
         let redo = item("Redo", Command::Redo, shift_key(Code::KeyZ));
@@ -117,6 +119,7 @@ impl NativeMenu {
             &export,
             &sep(),
             &backup,
+            &restore,
             &sep(),
             &PredefinedMenuItem::close_window(None),
         ]);
@@ -173,6 +176,7 @@ impl NativeMenu {
             undo,
             redo,
             backup,
+            restore,
             connect,
             themes,
             tabs,
@@ -207,6 +211,7 @@ impl NativeMenu {
         self.undo.set_enabled(s.can_undo);
         self.redo.set_enabled(s.can_redo);
         self.backup.set_enabled(s.online && !s.backing_up);
+        self.restore.set_enabled(s.online && !s.backing_up);
         self.connect
             .set_text(if s.online { "Reconnect" } else { "Connect" });
         for (t, c) in &self.themes {

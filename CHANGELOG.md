@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **Restore Scenes:** write the scenes from a `.syx` backup (or single scene files) back to the AE-30, either to their own slots or one after another from a chosen slot. Choose which scenes to include; any named scene about to be replaced is flagged first. Each scene is read back and checked byte for byte. Values the AE-30 changes while saving are written back directly, and settings it manages itself (unused effects) are recognised. About 3 seconds per scene, with progress and Cancel in the status bar. Available from File ▸ Restore Scenes…, the ☰ menu, the library's Restore… button and `ae30edit restore`.
+
+### Verified on the AE-30
+
+- Saving a part's tone to a user tone slot, and storing System settings, both survive a power cycle.
+
 ## v0.1.0 — 2026-11-25
 
 First release of the AE-30 Patch Editor, a scene and tone editor for the Roland Aerophone Pro AE-30. Changes are sent to the instrument as you make them, so you hear each edit immediately. Nothing is stored on the AE-30 until you save.
@@ -49,8 +59,8 @@ First release of the AE-30 Patch Editor, a scene and tone editor for the Roland 
 - The Windows build hasn't been tested on a Windows PC yet.
 - SuperNATURAL Acoustic tones and drum kits can be chosen but not edited inside. Roland doesn't publish their parameters, and its own app has the same limit.
 - Part 5's tone can't be edited (the AE-30 has temporary tones for parts 1–4 only).
-- Restoring a backup to the AE-30 isn't built yet; backups can be inspected and individual scenes imported.
-- The user-tone and System store commands are reverse-engineered and less tested than scene saving, which has been tested on an AE-30.
+- Restoring a backup to the AE-30 isn't built yet; backups can be inspected and individual scenes imported. (Added since: see Unreleased.)
+- The user-tone and System store commands are reverse-engineered and less tested than scene saving, which has been tested on an AE-30. (Both verified since.)
 
 ### Credits
 
