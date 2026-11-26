@@ -1,0 +1,32 @@
+# AE30PatchEditor
+
+Rust GUI patch/scene editor for the Roland Aerophone Pro AE-30 over MIDI SysEx (Roland RQ1/DT1).
+Protocol research: `AE30_SYSEX_NOTES.md`. Cargo workspace in `rust/`.
+
+## Commands (run in `rust/`)
+
+- `cargo run --bin ae30edit` - the editor (connects to the AE-30 automatically)
+- `cargo test` / `cargo fmt` / `cargo clippy --all-targets` - keep all clean
+- CLI tools (`ae30edit help`): `ports`, `probe`, `scene`, `names [user|preset]`, `read AA BB CC DD SIZE` (hex, plain size), `backup FILE.syx [FIRST LAST]`, `stream-test`, `editor-test` (drives the GUI model headless), `edit-test` (Temp Scene write/read-back/restore). None store anything on the unit.
+- `AE30_SCREENSHOT=out.png [AE30_TAB=scene|part|effects|controllers|tone|system] [AE30_PICKER=1] ae30edit` - open, wait until loaded, save a PNG of the window, quit.
+- `scripts/build-macos.sh` - universal `target/macos/AE-30 Patch Editor.app` + `.dmg` (ad-hoc signed unless a Developer ID is in the keychain; `logo.icns` used if added to `ae30-app/assets/icons/`)
+- `scripts/build-windows.sh` - cross-compile `target/windows/AE30PatchEditor-<version>-windows-x64.zip` (needs `x86_64-pc-windows-gnu` + `brew install mingw-w64`; linker in `rust/.cargo/config.toml`). Untested on a real Windows PC so far.
+- `python3 tools/gen_data.py <aerophoneCompanion>/app/data.js` - regenerate `ae30-core/data/ae30.json`.
+
+## Layout
+
+- `ae30-core` (no MIDI, unit-tested): `sysex` (framing, checksum, `Addr` 7-bit math, nibbles, identity), `params` (loads `data/ae30.json`: every block's params, encoding, ranges, labels, options, display `Format`, effect-type-specific params), `image` (`Area` + `Image`: local copy of an area as named blocks; DT1 data placed by address), `session` (I/O-free state machine: paced output, merged edits, one job in flight, streamed reads, scene/tone name lists, write commands), `syx` (scene files and backups), plus older `map`/`read`/`scene` helpers.
+- `ae30-app`: `midi` (midir ports, `Link::pump/run`), `editor` (GUI-free model: connection, loading, live edits + undo, follows panel changes, save/import/export/backup), `cli`, `ui/` (egui 0.37: `mod.rs` window, library, dialogs, tone picker; `pages.rs` Scene/Parts/Effects/Controllers/Tone/System; `widgets.rs` param controls, knob, fader, draggable envelope, assign curve; `theme.rs`).
+- Parameter data comes from aerophoneCompanion (MIT), which parsed Roland's PDFs. Credit it if distributing.
+
+## Gotchas
+
+- Raw vs value: `Param::get` returns `raw - vofs`; `encode` adds it back. Option lists index by value.
+- The unit answers with device ID 7F (its identity reply), and the session adopts it.
+- Perf_midi_ctrl blocks are 45 bytes; RQ1 with Roland's documented 0x2E gets no reply. RQ1s must be exact whole blocks (`Image::missing_reads`).
+- `Session::read_area` (one RQ1 for a whole area) is only for the temporary scene/tones. Never use it, or `read_raw` with a large size, on stored scenes: the unit streams on through following scenes and ignores all other requests until finished (see notes §11). Stored scenes use `Session::read_blocks` (pipelined whole-block RQ1s); the backup does this.
+- System area streams only partly; the editor falls back to per-block reads for missing blocks.
+- Writes to user scenes/tones/System use reverse-engineered `0F 00 10 0x` commands (`session::cmd`). Edits otherwise only touch the Temporary Scene/Tone.
+- Preset scene names are cached in the OS cache dir (`preset-scenes.txt`); user bank lists finish at 50 entries.
+- Platforms: macOS gets a native menu bar (`ui/native_menu.rs`, muda) and a unified title bar (fullsize content view; top bar leaves 70 pt for the window buttons and drags the window). Windows/Linux get the ☰ in-window menu. Both menus run `ui/commands.rs` `Command`s; keep them in step. Settings/Preferences (`ui/prefs.rs`, window in `ui/mod.rs`): theme, accent, corners, interface size (egui zoom factor), slider fill, knob speed, hide empty scenes; saved as key=value in the OS config dir `prefs.txt`. `AE30_DIALOG=prefs|about` opens one for screenshots.
+- egui: put card contents in `ui.vertical` when the card sits in a horizontal layout; grids need unique ids (`widgets::grid` salts by block + first param).

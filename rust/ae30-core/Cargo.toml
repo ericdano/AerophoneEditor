@@ -1,0 +1,10 @@
+[package]
+name = "ae30-core"
+description = "Roland Aerophone AE-30 SysEx protocol and parameter decoding (no GUI, no MIDI)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
