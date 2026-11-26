@@ -294,6 +294,11 @@ impl Session {
         self.out.is_empty() && self.jobs.is_empty() && self.running.is_none()
     }
 
+    /// Roughly how long the messages queued now take to go out.
+    pub fn queued_time(&self) -> Duration {
+        self.out.iter().map(|o| pace(o.bytes.len())).sum()
+    }
+
     pub fn pending_jobs(&self) -> usize {
         self.jobs.len() + usize::from(self.running.is_some())
     }

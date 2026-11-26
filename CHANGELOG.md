@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.3.0 — 2026-11-26
+
+This release adds a Live screen for playing on stage, with a playlist of your scenes.
+
+### Added
+
+- **Live tab** (the first tab, ⌘1/Ctrl+1): the scene's name in large type, big knobs for Reverb, Chorus, Delay and Color (the insert effect) with a type menu under each, and sliders for Level and Dark/Bright. Picking an effect type switches it on, and Color routes the active parts through the insert effect. The Color knob sets the setting that means "how much" for its type (Drive, Balance, Depth and so on), and a note appears when an effect is on but no part sends to it.
+- **Playlist:** add scenes for a gig, then switch with a click, Previous/Next, the arrow keys or Page Up/Down (which most page-turner pedals send). Each entry keeps its own copy of the scene, including tweaks made while it plays. Unchanged entries select their original scene. An edited entry is stored in an empty user scene when you next pick it, counting down from U12-50 and using only slots named INIT SCENE, so later picks are instant. The playlist is saved between sessions.
+- `ae30edit playlist-test FILE.syx`: checks the playlist on the AE-30 using U12-50 (only if it's empty), then restores it.
+
+### Verified on the AE-30
+
+- Storing a scene and restoring a backup work over Bluetooth MIDI on macOS.
+
+### Installing
+
+- **macOS:** open the `.dmg` and drag the app to Applications, replacing the old version. The app isn't notarized yet, so the first time, Control-click it and choose **Open** (or go to System Settings ▸ Privacy & Security ▸ **Open Anyway**).
+- **Windows:** unzip and run `AE30PatchEditor.exe`. If SmartScreen appears, choose **More info ▸ Run anyway**.
+- Your settings carry over.
+
 ## v0.2.1 — 2026-11-26
 
 The AE-30 Patch Editor now has its own app icon. Everything else is as in v0.2.0; see below for its features.

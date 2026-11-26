@@ -33,6 +33,7 @@ pub enum Tab {
     Controllers,
     Tone,
     System,
+    Live,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -87,6 +88,8 @@ pub struct View {
     pub restore: Option<RestoreUi>,
     pub about: bool,
     pub prefs: bool,
+    /// The playlist entry last scrolled into view.
+    pub playlist_shown: Option<usize>,
 }
 
 impl Default for View {
@@ -111,6 +114,7 @@ impl Default for View {
             restore: None,
             about: false,
             prefs: false,
+            playlist_shown: None,
         }
     }
 }
@@ -377,6 +381,7 @@ impl App {
         ui.add_space(4.0);
         ui.horizontal(|ui| {
             let tabs = [
+                (Tab::Live, "Live"),
                 (Tab::Scene, "Scene"),
                 (Tab::Part, "Parts"),
                 (Tab::Effects, "Effects"),
@@ -531,6 +536,153 @@ impl App {
         if let Some(c) = run {
             self.run_command(&ctx, c);
         }
+    }
+
+    // ---- playlist (Live tab) ------------------------------------------------
+
+    /// Arrow keys and Page Up/Down (what most page-turner pedals send) step
+    /// through the playlist while nothing else has the keyboard.
+    fn playlist_keys(&mut self, ctx: &egui::Context) {
+        if ctx.memory(|m| m.focused().is_some()) {
+            return;
+        }
+        let none = egui::Modifiers::NONE;
+        let (down, up) = ctx.input_mut(|i| {
+            (
+                i.consume_key(none, egui::Key::ArrowDown)
+                    | i.consume_key(none, egui::Key::PageDown)
+                    | i.consume_key(none, egui::Key::ArrowRight),
+                i.consume_key(none, egui::Key::ArrowUp)
+                    | i.consume_key(none, egui::Key::PageUp)
+                    | i.consume_key(none, egui::Key::ArrowLeft),
+            )
+        });
+        if down {
+            self.ed.playlist_step(1);
+        }
+        if up {
+            self.ed.playlist_step(-1);
+        }
+    }
+
+    fn playlist(&mut self, ui: &mut Ui) {
+        let pal = palette(ui);
+        let n = self.ed.playlist.entries.len();
+        ui.add_space(8.0);
+        ui.horizontal(|ui| {
+            ui.label(theme::section(ui, "Playlist"));
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                ui.label(RichText::new(format!("{n}")).color(pal.weak));
+            });
+        });
+        ui.add_space(2.0);
+        if ui
+            .add_enabled(
+                self.ed.scene.is_loaded(),
+                egui::Button::new("+  Add current scene")
+                    .min_size(vec2(ui.available_width(), 28.0)),
+            )
+            .on_hover_text("Keep a copy of the scene playing now at the end of the playlist")
+            .clicked()
+        {
+            self.ed.playlist_add();
+        }
+        ui.add_space(6.0);
+        let list_h = (ui.available_height() - 96.0).max(100.0);
+        let active = self.ed.playlist.active;
+        let mut act: Option<(usize, i32)> = None; // (entry, 0 play / ±1 move / 2 revert / 3 remove)
+        egui::ScrollArea::vertical()
+            .id_salt("playlist")
+            .max_height(list_h)
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                if n == 0 {
+                    ui.label(
+                        RichText::new(
+                            "Pick a scene in the library, set it up, then Add current scene. \
+                             Repeat for each song.",
+                        )
+                        .color(pal.weak),
+                    );
+                }
+                for i in 0..n {
+                    let e = &self.ed.playlist.entries[i];
+                    let name = e.name();
+                    let can_revert = e.changed && e.source.is_some();
+                    let pending = e.changed && !e.stored;
+                    let place = self.ed.playlist_where(i);
+                    let r = playlist_row(ui, i + 1, &name, &place, active == Some(i), pending);
+                    if r.clicked() {
+                        act = Some((i, 0));
+                    }
+                    if active == Some(i) && self.view.playlist_shown != active {
+                        r.scroll_to_me(Some(Align::Center));
+                    }
+                    r.on_hover_text(if pending {
+                        "Edited: stored in an empty user scene when you pick it"
+                    } else {
+                        "Pick to play (right-click for more)"
+                    })
+                    .context_menu(|ui| {
+                        if ui
+                            .add_enabled(i > 0, egui::Button::new("Move up"))
+                            .clicked()
+                        {
+                            act = Some((i, -1));
+                        }
+                        if ui
+                            .add_enabled(i + 1 < n, egui::Button::new("Move down"))
+                            .clicked()
+                        {
+                            act = Some((i, 1));
+                        }
+                        if ui
+                            .add_enabled(can_revert, egui::Button::new("Revert to original scene"))
+                            .clicked()
+                        {
+                            act = Some((i, 2));
+                        }
+                        ui.separator();
+                        if ui.button("Remove from playlist").clicked() {
+                            act = Some((i, 3));
+                        }
+                    });
+                }
+            });
+        self.view.playlist_shown = active;
+        match act {
+            Some((i, 0)) => self.ed.playlist_play(i),
+            Some((i, d @ (-1 | 1))) => self.ed.playlist_move(i, d),
+            Some((i, 2)) => self.ed.playlist_revert(i),
+            Some((i, 3)) => self.ed.playlist_remove(i),
+            _ => {}
+        }
+        ui.add_space(6.0);
+        ui.separator();
+        ui.horizontal(|ui| {
+            let w = (ui.available_width() - ui.spacing().item_spacing.x) / 2.0;
+            let size = vec2(w, 34.0);
+            let has = n > 0;
+            if ui
+                .add_enabled(has, egui::Button::new("◀  Previous").min_size(size))
+                .on_hover_text("↑ or Page Up")
+                .clicked()
+            {
+                self.ed.playlist_step(-1);
+            }
+            if ui
+                .add_enabled(has, egui::Button::new("Next  ▶").min_size(size))
+                .on_hover_text("↓ or Page Down")
+                .clicked()
+            {
+                self.ed.playlist_step(1);
+            }
+        });
+        ui.label(
+            RichText::new("Edited entries are stored in empty user scenes from U12-50 down when you pick them.")
+                .size(11.0)
+                .color(pal.weak),
+        );
     }
 
     // ---- status bar ---------------------------------------------------------
@@ -1413,6 +1565,7 @@ impl App {
                     "controllers" => Tab::Controllers,
                     "tone" => Tab::Tone,
                     "system" => Tab::System,
+                    "live" => Tab::Live,
                     _ => Tab::Scene,
                 };
             }
@@ -1503,6 +1656,51 @@ fn lib_row_w(
     r
 }
 
+/// A playlist row: number, name, and where it plays from.
+fn playlist_row(
+    ui: &mut Ui,
+    num: usize,
+    name: &str,
+    place: &str,
+    selected: bool,
+    pending: bool,
+) -> egui::Response {
+    let pal = palette(ui);
+    let (rect, r) = ui.allocate_exact_size(vec2(ui.available_width(), 32.0), Sense::click());
+    let bg = if selected {
+        pal.accent_soft
+    } else if r.hovered() {
+        pal.hover
+    } else {
+        Color32::TRANSPARENT
+    };
+    let p = ui.painter();
+    p.rect_filled(rect, 6.0, bg);
+    p.text(
+        rect.left_center() + vec2(10.0, 0.0),
+        egui::Align2::LEFT_CENTER,
+        num.to_string(),
+        egui::FontId::proportional(12.0),
+        if selected { pal.accent } else { pal.weak },
+    );
+    p.text(
+        rect.right_center() - vec2(8.0, 0.0),
+        egui::Align2::RIGHT_CENTER,
+        place,
+        egui::FontId::proportional(11.0),
+        if pending { pal.amber } else { pal.weak },
+    );
+    let font = egui::FontId::new(14.0, theme::semibold());
+    p.text(
+        rect.left_center() + vec2(34.0, 0.0),
+        egui::Align2::LEFT_CENTER,
+        name,
+        font,
+        pal.text,
+    );
+    r
+}
+
 fn note_name(n: u8) -> String {
     const NAMES: [&str; 12] = [
         "C", "C♯", "D", "E♭", "E", "F", "F♯", "G", "A♭", "A", "B♭", "B",
@@ -1586,6 +1784,15 @@ impl eframe::App for App {
                 .min_size(200.0)
                 .show(ui, |ui| self.library(ui));
         }
+        if self.ed.is_online() && self.view.tab == Tab::Live {
+            self.playlist_keys(&ctx);
+            egui::Panel::right("playlist")
+                .frame(bar.inner_margin(egui::Margin::symmetric(10, 6)))
+                .resizable(true)
+                .default_size(280.0)
+                .min_size(220.0)
+                .show(ui, |ui| self.playlist(ui));
+        }
         let page = egui::Frame::new()
             .fill(pal.bg)
             .inner_margin(egui::Margin::same(16));
@@ -1603,6 +1810,7 @@ impl eframe::App for App {
                     Tab::Controllers => pages::controllers(ui, &mut self.view, &mut self.ed),
                     Tab::Tone => pages::tone(ui, &mut self.view, &mut self.ed),
                     Tab::System => pages::system(ui, &mut self.ed),
+                    Tab::Live => pages::live(ui, &mut self.ed),
                 });
         });
         self.tone_picker(&ctx);

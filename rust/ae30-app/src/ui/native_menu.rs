@@ -78,6 +78,7 @@ impl NativeMenu {
             Code::Digit4,
             Code::Digit5,
             Code::Digit6,
+            Code::Digit7,
         ];
         let mut tabs = Vec::new();
         let view_menu = Submenu::new("View", true);

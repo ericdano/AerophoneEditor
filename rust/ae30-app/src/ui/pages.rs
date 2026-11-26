@@ -518,6 +518,279 @@ pub fn effects(ui: &mut Ui, view: &mut View, ed: &mut Editor) {
     });
 }
 
+// ---- Live --------------------------------------------------------------------
+
+/// The Live screen's effect knobs: (title, block, type list, type offset,
+/// switch offset, what parts send to it at).
+const LIVE_FX: [(&str, &str, &str, u32, u32); 4] = [
+    ("Reverb", "Perf_rev", "rev", 1, 0),
+    ("Chorus", "Perf_cho", "cho", 1, 0),
+    ("Delay", "Perf_dly", "dly", 1, 0),
+    ("Color", "Perf_ifx", "mfx", 0, 1),
+];
+/// Scene Part: switch, reverb/chorus/delay sends, output assign, cutoff.
+const PART_SWITCH: u32 = 0x01;
+const PART_OUTPUT: u32 = 0x0B;
+const PART_CUTOFF: u32 = 0x1B;
+
+/// Parts that are switched on.
+fn parts_on(ed: &Editor) -> Vec<u8> {
+    let p = data().table("Perf_part").at(PART_SWITCH).unwrap();
+    (1..=5u8)
+        .filter(|n| ed.value(Target::Scene, &format!("Perf_part_{n}"), p) == Some(1))
+        .collect()
+}
+
+fn part_value(ed: &Editor, part: u8, off: u32) -> i32 {
+    let p = data().table("Perf_part").at(off).unwrap();
+    ed.value(Target::Scene, &format!("Perf_part_{part}"), p)
+        .unwrap_or(0)
+}
+
+fn block_value(ed: &Editor, block: &str, off: u32) -> i32 {
+    ed.scene.block(block).and_then(|b| b.get(off)).unwrap_or(0)
+}
+
+/// An effect's type, or 0 (Off/Thru) while it is switched off.
+fn live_type(ed: &Editor, block: &str, type_off: u32, sw_off: u32) -> i32 {
+    if block_value(ed, block, sw_off) == 0 {
+        0
+    } else {
+        block_value(ed, block, type_off)
+    }
+}
+
+/// The Color (IFX) knob's setting for effect type `ty`: the one that most
+/// says "how much".
+fn color_amount(table: &'static Table, ty: i32) -> Option<&'static Param> {
+    let ps = table.for_fx(ty as u16);
+    [
+        "Drive",
+        "Balance",
+        "Depth",
+        "Boost Gain",
+        "Pre Amp Gain",
+        "Post Gain",
+        "Level",
+    ]
+    .iter()
+    .find_map(|w| ps.iter().find(|p| p.label() == *w).copied())
+}
+
+/// Why an effect that is on can't be heard, if so.
+fn live_hint(ed: &Editor, block: &str) -> Option<&'static str> {
+    let parts = parts_on(ed);
+    let to_ifx = parts.iter().any(|&n| part_value(ed, n, PART_OUTPUT) == 1);
+    let ifx_on = live_type(ed, "Perf_ifx", 0, 1) != 0 && to_ifx;
+    let sends = |part_off: u32, ifx_send: i32| {
+        parts.iter().any(|&n| part_value(ed, n, part_off) > 0) || (ifx_on && ifx_send > 0)
+    };
+    let heard = match block {
+        "Perf_rev" => {
+            sends(7, block_value(ed, "Perf_ifx", 3))
+                || ["Perf_cho", "Perf_dly"].iter().any(|b| {
+                    live_type(ed, b, 1, 0) != 0
+                        && block_value(ed, b, 2) > 0
+                        && block_value(ed, b, 3) > 0
+                })
+        }
+        "Perf_cho" => sends(8, block_value(ed, "Perf_ifx", 2)),
+        "Perf_dly" => sends(9, block_value(ed, "Perf_common", 25)),
+        _ => to_ifx,
+    };
+    (!heard).then_some(if block == "Perf_ifx" {
+        "No part goes through it"
+    } else {
+        "No part sends to it (Parts page)"
+    })
+}
+
+/// Pick an effect type; switches it on, and for Color routes the parts
+/// that are on through it.
+fn set_live_type(ed: &mut Editor, block: &str, type_off: u32, sw_off: u32, ty: i32) {
+    let t = Target::Scene;
+    let Some(table) = ed.scene.block(block).map(|b| b.table) else {
+        return;
+    };
+    ed.set(t, block, table.at(type_off).unwrap(), ty);
+    if ty != 0 && block_value(ed, block, sw_off) == 0 {
+        ed.set(t, block, table.at(sw_off).unwrap(), 1);
+    }
+    if ty != 0 && block == "Perf_ifx" {
+        let out = data().table("Perf_part").at(PART_OUTPUT).unwrap();
+        for n in parts_on(ed) {
+            ed.set(t, &format!("Perf_part_{n}"), out, 1);
+        }
+    }
+}
+
+fn live_fx(ui: &mut Ui, ed: &mut Editor, fx: (&str, &str, &str, u32, u32), card_w: f32) {
+    let (_, block, kind, type_off, sw_off) = fx;
+    let pal = palette(ui);
+    let t = Target::Scene;
+    let Some(table) = ed.scene.block(block).map(|b| b.table) else {
+        return;
+    };
+    let ty = live_type(ed, block, type_off, sw_off);
+    let amount = if block == "Perf_ifx" {
+        color_amount(table, ty).filter(|_| ty != 0)
+    } else {
+        table.at(2)
+    };
+    let label = match amount {
+        Some(p) if block == "Perf_ifx" => p.label().to_string(),
+        _ => "Level".into(),
+    };
+    ui.add_space(4.0);
+    match amount {
+        Some(p) => {
+            let v = ed.value(t, block, p).filter(|_| ty != 0);
+            let show = |x: i32| p.show(x);
+            let reset = widgets::default_of(p);
+            if let Some(n) = widgets::dial(ui, 96.0, v, (p.min, p.max), reset, &show, &label) {
+                ed.set(t, block, p, n);
+            }
+        }
+        None => {
+            widgets::dial(ui, 96.0, None, (0, 127), None, &|x| x.to_string(), &label);
+        }
+    }
+    ui.add_space(8.0);
+    let mut sel = ty;
+    ui.spacing_mut().combo_width = card_w - 50.0;
+    egui::ComboBox::from_id_salt(("live_type", block))
+        .selected_text(fx_name(kind, ty))
+        .height(420.0)
+        .show_ui(ui, |ui| {
+            for f in fx_types(kind) {
+                ui.selectable_value(&mut sel, i32::from(f.id), &f.name);
+            }
+        });
+    if sel != ty {
+        set_live_type(ed, block, type_off, sw_off, sel);
+    }
+    let hint = (ty != 0).then(|| live_hint(ed, block)).flatten();
+    ui.label(
+        RichText::new(hint.unwrap_or(" "))
+            .size(11.0)
+            .color(pal.amber),
+    );
+}
+
+/// A wide horizontal slider with words at both ends; returns a new value.
+fn live_slider(
+    ui: &mut Ui,
+    title: &str,
+    ends: (&str, &str),
+    v: i32,
+    range: (i32, i32),
+    show: impl Fn(i32) -> String,
+) -> Option<i32> {
+    let pal = palette(ui);
+    let mut x = v;
+    let mut changed = false;
+    ui.horizontal(|ui| {
+        ui.add_sized(
+            vec2(70.0, 28.0),
+            egui::Label::new(RichText::new(title).size(14.0)),
+        );
+        let end = |ui: &mut Ui, s: &str| {
+            ui.add_sized(
+                vec2(44.0, 28.0),
+                egui::Label::new(RichText::new(s).color(pal.weak)),
+            );
+        };
+        end(ui, ends.0);
+        let w = (ui.available_width() - 110.0).clamp(120.0, 640.0);
+        ui.spacing_mut().slider_width = w;
+        ui.spacing_mut().slider_rail_height = 8.0;
+        ui.spacing_mut().interact_size.y = 28.0;
+        let r = ui.add(
+            egui::Slider::new(&mut x, range.0..=range.1)
+                .show_value(false)
+                .clamping(egui::SliderClamping::Always),
+        );
+        changed = r.changed();
+        end(ui, ends.1);
+        ui.label(RichText::new(show(x)).size(14.0).family(theme::semibold()));
+    });
+    (changed && x != v).then_some(x)
+}
+
+pub fn live(ui: &mut Ui, ed: &mut Editor) {
+    if !ed.scene.is_loaded() {
+        return not_loaded(ui, ed);
+    }
+    let pal = palette(ui);
+    let t = Target::Scene;
+    // What's playing.
+    let place = ed
+        .current_scene()
+        .map(|r| r.to_string())
+        .unwrap_or_default();
+    let n = ed.playlist.entries.len();
+    let list = match ed.playlist.active {
+        Some(i) => format!("Playlist {} of {n}", i + 1),
+        None => "Not in the playlist".into(),
+    };
+    ui.label(RichText::new(format!("{place}   ·   {list}")).color(pal.weak));
+    ui.horizontal(|ui| {
+        ui.label(theme::title(ed.scene_name(), 34.0));
+        if ed.dirty {
+            ui.label(RichText::new("edited").color(pal.amber));
+        }
+    });
+    let tones: Vec<String> = parts_on(ed).into_iter().map(|p| ed.tone_label(p)).collect();
+    ui.label(RichText::new(tones.join("  ·  ")).color(pal.weak));
+    ui.add_space(14.0);
+    // Four cards side by side, sharing the width.
+    let gap = 12.0;
+    let card_w = ((ui.available_width() - 3.0 * gap) / 4.0).clamp(150.0, 230.0);
+    flow(ui, |ui| {
+        for fx in LIVE_FX {
+            card(ui, fx.0, card_w, |ui| {
+                ui.vertical_centered(|ui| live_fx(ui, ed, fx, card_w));
+            });
+        }
+    });
+    ui.add_space(gap);
+    let w = (card_w * 4.0 + 3.0 * gap).min(ui.available_width());
+    card(ui, "Output", w, |ui| {
+        ui.spacing_mut().item_spacing.y = 10.0;
+        // Level: the scene's volume.
+        let vol = data().table("Perf_common").at(24).unwrap();
+        if let Some(v) = ed.value(t, "Perf_common", vol) {
+            if let Some(x) = live_slider(ui, "Level", ("", ""), v, (vol.min, vol.max), |x| {
+                x.to_string()
+            }) {
+                ed.set(t, "Perf_common", vol, x);
+            }
+        }
+        // Dark/bright: the parts' cutoff offsets, moved together.
+        let parts = parts_on(ed);
+        if let Some(&first) = parts.first() {
+            let cut = data().table("Perf_part").at(PART_CUTOFF).unwrap();
+            let v = part_value(ed, first, PART_CUTOFF);
+            let show = |x: i32| {
+                if x > 0 {
+                    format!("+{x}")
+                } else {
+                    x.to_string()
+                }
+            };
+            if let Some(x) =
+                live_slider(ui, "Tone", ("Dark", "Bright"), v, (cut.min, cut.max), show)
+            {
+                let delta = x - v;
+                for p in parts {
+                    let nv = cut.clamp(part_value(ed, p, PART_CUTOFF) + delta);
+                    ed.set(t, &format!("Perf_part_{p}"), cut, nv);
+                }
+            }
+        }
+    });
+}
+
 // ---- Controllers ---------------------------------------------------------------
 
 pub const CONTROLLERS: [(&str, &str); 18] = [

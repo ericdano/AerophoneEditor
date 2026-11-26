@@ -48,6 +48,7 @@ pub fn run(cmd: &str, args: &[String], port: Option<&str>) -> Result<(), String>
         "stream-test" => stream_test(&hints, args),
         "editor-test" => editor_test(port),
         "edit-test" => edit_test(&hints),
+        "playlist-test" => playlist_test(port, args),
         "stream-log" => stream_log(&hints, args),
         "listen" => listen(&hints),
         "restore" => restore(port, args),
@@ -334,6 +335,121 @@ fn editor_test(port: Option<&str>) -> Result<(), String> {
         ed.preset_names.len()
     );
     Ok(())
+}
+
+/// Live playlist check on the AE-30. Writes only to U12-50, and only if it
+/// is empty (INIT SCENE): backs it up to `FILE.syx`, then adds the current
+/// scene to an in-memory playlist, changes its reverb level, picks the entry
+/// again (which stores it in U12-50 and selects that), reads it back, picks
+/// it once more (now just a scene change), restores U12-50 from the backup
+/// and returns to the original scene.
+fn playlist_test(port: Option<&str>, args: &[String]) -> Result<(), String> {
+    use crate::editor::{restore_plan, Editor, Playlist};
+    use ae30_core::scene::SceneRef;
+    let file = args.first().ok_or("usage: playlist-test BACKUP.syx")?;
+    let slot = 599u16;
+    let mut ed = Editor::new();
+    ed.playlist = Playlist::default(); // not the saved one
+    ed.connect(port, None);
+    let run = |ed: &mut Editor, what: &str, secs: u64, done: &dyn Fn(&Editor) -> bool| {
+        let t = Instant::now();
+        while t.elapsed() < Duration::from_secs(secs) {
+            let wait = ed.tick().unwrap_or(Duration::from_millis(5));
+            std::thread::sleep(wait.min(Duration::from_millis(5)));
+            if done(ed) {
+                println!("  {what}: {:.2}s", t.elapsed().as_secs_f32());
+                return Ok(());
+            }
+        }
+        Err(format!("timed out: {what}"))
+    };
+    let idle = |ed: &Editor| {
+        ed.is_online()
+            && !ed.is_loading()
+            && ed.session.is_idle()
+            && ed.scene.is_loaded()
+            && ed.backup.is_none()
+            && ed.restore.is_none()
+    };
+    run(&mut ed, "loaded", 40, &|ed: &Editor| {
+        idle(ed) && ed.user_names.iter().all(|n| !n.is_empty())
+    })?;
+    if ed.user_names[usize::from(slot)] != "INIT SCENE" {
+        return Err(format!(
+            "U12-50 isn't empty (\"{}\"); not touching it",
+            ed.user_names[usize::from(slot)]
+        ));
+    }
+    let original = ed.setup.blocks[0].data[..3].to_vec();
+    let home = ed.current_scene();
+    println!("current {:?} \"{}\"", home, ed.scene_name());
+
+    ed.start_backup(file.into(), vec![slot]);
+    run(&mut ed, "backed up U12-50", 30, &idle)?;
+
+    ed.playlist_add();
+    let rev = data().table("Perf_rev").at(2).unwrap();
+    let before = ed
+        .value(crate::editor::Target::Scene, "Perf_rev", rev)
+        .unwrap();
+    let want = if before < 127 { before + 1 } else { before - 1 };
+    ed.set(crate::editor::Target::Scene, "Perf_rev", rev, want);
+    println!("reverb level {before} -> {want}");
+    run(&mut ed, "edit copied into the entry", 5, &|ed: &Editor| {
+        ed.playlist.entries[0].changed
+    })?;
+
+    // Pick the entry: stores it in U12-50 and selects it.
+    ed.playlist_play(0);
+    let e = &ed.playlist.entries[0];
+    println!("entry: slot {:?} stored {}", e.slot, e.stored);
+    run(&mut ed, "stored and selected", 30, &idle)?;
+    std::thread::sleep(Duration::from_millis(500));
+    ed.load_scene();
+    run(&mut ed, "read back", 15, &idle)?;
+    let now = ed.current_scene();
+    let got = ed.value(crate::editor::Target::Scene, "Perf_rev", rev);
+    println!("unit now on {now:?}, reverb level {got:?}");
+    let ok_store = now == Some(SceneRef::User(slot + 1)) && got == Some(want);
+    ed.load_names();
+    run(&mut ed, "names", 30, &idle)?;
+    println!("U12-50 is now \"{}\"", ed.user_names[usize::from(slot)]);
+
+    // Pick it again: just a scene change now.
+    let t = Instant::now();
+    ed.select_scene(original[0], original[1], original[2]);
+    run(&mut ed, "back to the original", 15, &idle)?;
+    ed.playlist_play(0);
+    let queued = ed.session.queued_time();
+    println!(
+        "second pick queued {:.0} ms of MIDI ({:.2}s after leaving)",
+        queued.as_secs_f32() * 1000.0,
+        t.elapsed().as_secs_f32()
+    );
+    run(&mut ed, "selected again", 15, &idle)?;
+    let ok_again =
+        ed.current_scene() == Some(SceneRef::User(slot + 1)) && queued < Duration::from_millis(100);
+
+    // Put U12-50 back and go home.
+    let bytes = std::fs::read(file).map_err(|e| e.to_string())?;
+    let items = restore_plan(ae30_core::syx::scenes_from_syx(&bytes), None)?;
+    ed.start_restore(items);
+    run(&mut ed, "U12-50 restored", 60, &idle)?;
+    ed.select_scene(original[0], original[1], original[2]);
+    run(&mut ed, "home", 15, &idle)?;
+    ed.load_names();
+    run(&mut ed, "names", 30, &idle)?;
+    println!(
+        "U12-50 is \"{}\" again; on {:?}",
+        ed.user_names[usize::from(slot)],
+        ed.current_scene()
+    );
+    if ok_store && ok_again && ed.current_scene() == home {
+        println!("OK");
+        Ok(())
+    } else {
+        Err(format!("failed: stored {ok_store}, reselect {ok_again}"))
+    }
 }
 
 /// Live-edit check on the Temporary Scene only: lower Part 1's level by

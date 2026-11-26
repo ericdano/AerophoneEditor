@@ -19,6 +19,9 @@ use ae30_core::syx;
 
 use crate::midi::{self, Link, Waker};
 
+mod playlist;
+pub use playlist::{Entry, Playlist};
+
 const TAG_SETUP: u64 = 1;
 const TAG_SCENE: u64 = 2;
 const TAG_SYSTEM: u64 = 3;
@@ -300,6 +303,8 @@ pub struct Editor {
     /// Pitch bend from the unit (-8192..8191) and when it last moved.
     pub bend: (i16, Instant),
     pub last_rx: Option<Instant>,
+    /// The Live screen's playlist.
+    pub playlist: Playlist,
     pending: HashMap<u64, usize>,
     scene_reload: Option<Instant>,
     tone_reload: [Option<Instant>; 4],
@@ -337,6 +342,7 @@ impl Editor {
             note: None,
             bend: (0, now),
             last_rx: None,
+            playlist: Playlist::load(),
             pending: HashMap::new(),
             scene_reload: None,
             tone_reload: [None; 4],
@@ -438,6 +444,9 @@ impl Editor {
             }
         }
         let mut wake = self.session.next_wake(now);
+        if let Some(d) = self.playlist_tick(now) {
+            wake = Some(wake.map_or(d, |w| w.min(d)));
+        }
         for t in self
             .tone_reload
             .iter()
@@ -615,6 +624,7 @@ impl Editor {
                 for p in 1..=4 {
                     self.load_tone(p);
                 }
+                self.playlist_loaded();
             }
             _ => {}
         }
@@ -628,6 +638,8 @@ impl Editor {
     }
 
     pub fn load_scene(&mut self) {
+        // Keep edits made to a playlist entry before they're replaced.
+        self.playlist_capture(false);
         self.stream(TAG_SCENE);
         for t in &mut self.tones {
             t.invalidate();

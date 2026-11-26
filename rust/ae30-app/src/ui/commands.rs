@@ -63,13 +63,14 @@ pub enum Command {
     RolandSupport,
 }
 
-pub const TABS: [(Tab, &str, Key); 6] = [
-    (Tab::Scene, "Scene", Key::Num1),
-    (Tab::Part, "Parts", Key::Num2),
-    (Tab::Effects, "Effects", Key::Num3),
-    (Tab::Controllers, "Controllers", Key::Num4),
-    (Tab::Tone, "Tone", Key::Num5),
-    (Tab::System, "System", Key::Num6),
+pub const TABS: [(Tab, &str, Key); 7] = [
+    (Tab::Live, "Live", Key::Num1),
+    (Tab::Scene, "Scene", Key::Num2),
+    (Tab::Part, "Parts", Key::Num3),
+    (Tab::Effects, "Effects", Key::Num4),
+    (Tab::Controllers, "Controllers", Key::Num5),
+    (Tab::Tone, "Tone", Key::Num6),
+    (Tab::System, "System", Key::Num7),
 ];
 
 /// Keyboard shortcuts (⌘ on macOS, Ctrl elsewhere). On macOS the menu bar

@@ -154,18 +154,35 @@ pub static KNOB_PIXELS: std::sync::atomic::AtomicU32 = std::sync::atomic::Atomic
 /// A rotary knob with its label and value underneath. Drag up/down or
 /// scroll to change; double-click resets signed values to the centre.
 pub fn knob(ui: &mut Ui, ed: &mut Editor, t: Target, block: &str, p: &'static Param, label: &str) {
-    let pal = palette(ui);
     let v = ed.value(t, block, p);
+    let show = |x: i32| p.show(x);
     ui.vertical_centered(|ui| {
-        ui.spacing_mut().item_spacing.y = 1.0;
-        let size = 38.0;
-        let (rect, r) = ui.allocate_exact_size(vec2(size, size), Sense::click_and_drag());
-        let Some(v) = v else {
-            return;
-        };
-        let range = (p.max - p.min).max(1) as f32;
+        if let Some(n) = dial(ui, 38.0, v, (p.min, p.max), default_of(p), &show, label) {
+            ed.set(t, block, p, n);
+        }
+    });
+}
+
+/// The drawing and handling of a knob of `size` points for a value in
+/// `range`, labelled underneath. Returns a new value when it's changed.
+/// With `v` None it shows an empty, inactive knob.
+pub fn dial(
+    ui: &mut Ui,
+    size: f32,
+    v: Option<i32>,
+    (min, max): (i32, i32),
+    reset: Option<i32>,
+    show: &dyn Fn(i32) -> String,
+    label: &str,
+) -> Option<i32> {
+    let pal = palette(ui);
+    let scale = (size / 38.0).sqrt();
+    ui.spacing_mut().item_spacing.y = 1.0 * scale;
+    let (rect, r) = ui.allocate_exact_size(vec2(size, size), Sense::click_and_drag());
+    let range = (max - min).max(1) as f32;
+    let mut new = None;
+    if let Some(v) = v {
         let acc_id = r.id.with("acc");
-        let mut new = None;
         if r.drag_started() {
             ui.data_mut(|d| d.insert_temp(acc_id, v as f32));
         }
@@ -181,7 +198,7 @@ pub fn knob(ui: &mut Ui, ed: &mut Editor, t: Target, block: &str, p: &'static Pa
             let delta = -r.drag_delta().y * range / px * fine;
             let acc = ui.data_mut(|d| {
                 let a = d.get_temp_mut_or(acc_id, v as f32);
-                *a = (*a + delta).clamp(p.min as f32, p.max as f32);
+                *a = (*a + delta).clamp(min as f32, max as f32);
                 *a
             });
             new = Some(acc.round() as i32);
@@ -194,58 +211,59 @@ pub fn knob(ui: &mut Ui, ed: &mut Editor, t: Target, block: &str, p: &'static Pa
             }
         }
         if r.double_clicked() {
-            new = default_of(p);
+            new = reset;
         }
-        if let Some(n) = new {
-            let n = p.clamp(n);
-            if n != v {
-                ed.set(t, block, p, n);
-            }
-        }
-        let shown = new.map_or(v, |n| p.clamp(n));
-        // Draw: track arc, value arc from the zero point, pointer.
-        let c = rect.center();
-        let rad = size / 2.0 - 3.0;
-        let a0 = std::f32::consts::PI * 0.75;
-        let sweep = std::f32::consts::PI * 1.5;
-        let frac = |x: i32| (x - p.min) as f32 / range;
-        let zero = if p.min < 0 && p.max > 0 { frac(0) } else { 0.0 };
-        let arc = |from: f32, to: f32| -> Vec<Pos2> {
-            let n = 32;
-            (0..=n)
-                .map(|i| {
-                    let f = from + (to - from) * i as f32 / n as f32;
-                    let a = a0 + sweep * f;
-                    c + vec2(a.cos(), a.sin()) * rad
-                })
-                .collect()
-        };
-        let painter = ui.painter();
-        painter.add(Shape::line(arc(0.0, 1.0), Stroke::new(4.0, pal.control)));
-        let f = frac(shown);
+    }
+    let new = new
+        .map(|n| n.clamp(min, max.max(min)))
+        .filter(|&n| Some(n) != v);
+    let shown = new.or(v);
+    // Draw: track arc, value arc from the zero point, pointer.
+    let c = rect.center();
+    let thick = 4.0 * scale;
+    let rad = size / 2.0 - thick * 0.75;
+    let a0 = std::f32::consts::PI * 0.75;
+    let sweep = std::f32::consts::PI * 1.5;
+    let frac = |x: i32| (x - min) as f32 / range;
+    let zero = if min < 0 && max > 0 { frac(0) } else { 0.0 };
+    let arc = |from: f32, to: f32| -> Vec<Pos2> {
+        let n = 48;
+        (0..=n)
+            .map(|i| {
+                let f = from + (to - from) * i as f32 / n as f32;
+                let a = a0 + sweep * f;
+                c + vec2(a.cos(), a.sin()) * rad
+            })
+            .collect()
+    };
+    let painter = ui.painter();
+    painter.add(Shape::line(arc(0.0, 1.0), Stroke::new(thick, pal.control)));
+    painter.circle_filled(c, rad - thick * 1.5, pal.raised);
+    if let Some(s) = shown {
+        let f = frac(s);
         let (lo, hi) = if f < zero { (f, zero) } else { (zero, f) };
         let col = if r.hovered() || r.dragged() {
             pal.accent
         } else {
             pal.accent.gamma_multiply(0.85)
         };
-        painter.add(Shape::line(arc(lo, hi), Stroke::new(4.0, col)));
+        painter.add(Shape::line(arc(lo, hi), Stroke::new(thick, col)));
         let a = a0 + sweep * f;
-        painter.circle_filled(c, rad - 6.0, pal.raised);
         painter.line_segment(
             [
-                c + Rot2::from_angle(a) * vec2(rad - 12.0, 0.0),
-                c + Rot2::from_angle(a) * vec2(rad - 5.0, 0.0),
+                c + Rot2::from_angle(a) * vec2(rad - thick * 3.0, 0.0),
+                c + Rot2::from_angle(a) * vec2(rad - thick * 1.25, 0.0),
             ],
-            Stroke::new(2.0, pal.text),
+            Stroke::new(2.0 * scale, pal.text),
         );
         r.on_hover_text(format!(
             "{label}: {}  (drag, scroll; Shift for fine)",
-            p.show(shown)
+            show(s)
         ));
-        ui.label(RichText::new(label).size(10.5).color(pal.weak));
-        ui.label(RichText::new(p.show(shown)).size(11.5));
-    });
+    }
+    ui.label(RichText::new(label).size(10.5 * scale).color(pal.weak));
+    ui.label(RichText::new(shown.map_or("–".into(), show)).size(11.5 * scale));
+    new
 }
 
 /// A vertical fader for levels.
