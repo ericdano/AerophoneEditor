@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.2.1 — 2026-11-26
+
+The AE-30 Patch Editor now has its own app icon. Everything else is as in v0.2.0; see below for its features.
+
+### Added
+
+- **App icon:** used for the window, the Dock, the About box, the macOS app and the Windows `.exe` (which now also shows its version and description in Explorer). `rust/scripts/make-icons.py` makes the icon files from `ae30-app/assets/icons/icon-source.png`.
+
+### Installing
+
+- **macOS:** open the `.dmg` and drag the app to Applications, replacing the old version. The app isn't notarized yet, so the first time, Control-click it and choose **Open** (or go to System Settings ▸ Privacy & Security ▸ **Open Anyway**). If the Dock still shows a blank icon, restart the Dock or log out and back in.
+- **Windows:** unzip and run `AE30PatchEditor.exe`. If SmartScreen appears, choose **More info ▸ Run anyway**.
+- Your settings carry over.
+
 ## v0.2.0 — 2026-11-26
 
 This release adds restoring backups to the AE-30, and confirms on a real AE-30 that every store command works.

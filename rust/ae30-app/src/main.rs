@@ -51,6 +51,9 @@ fn gui() -> ExitCode {
         .with_app_id("ae30-patch-editor")
         .with_inner_size([1320.0, 880.0])
         .with_min_inner_size([900.0, 560.0]);
+    if let Ok(icon) = eframe::icon_data::from_png_bytes(ui::ICON_PNG) {
+        viewport = viewport.with_icon(icon);
+    }
     // macOS: one unified toolbar, as in Finder or Logic — the content runs
     // under a transparent title bar and the window buttons sit on the top bar.
     if cfg!(target_os = "macos") {

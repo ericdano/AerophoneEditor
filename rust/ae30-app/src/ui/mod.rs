@@ -22,6 +22,9 @@ use theme::palette;
 
 pub const APP_NAME: &str = "AE-30 Patch Editor";
 
+/// The app icon (window, Dock, About box); made by `scripts/make-icons.py`.
+pub const ICON_PNG: &[u8] = include_bytes!("../../assets/icons/logo.png");
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Tab {
     Scene,
@@ -121,6 +124,8 @@ pub struct App {
     pub prefs: prefs::Prefs,
     #[cfg(target_os = "macos")]
     native_menu: Option<native_menu::NativeMenu>,
+    /// The icon as a texture, loaded on first use (About box).
+    icon: Option<egui::TextureHandle>,
     /// Developer aid: `AE30_SCREENSHOT=file.png` saves the window once loaded.
     shot: Option<(String, std::time::Instant, bool)>,
 }
@@ -138,6 +143,7 @@ impl App {
             view: View::default(),
             started: false,
             last_scan: None,
+            icon: None,
             prefs: prefs::Prefs::load(),
             #[cfg(target_os = "macos")]
             native_menu: None,
@@ -1195,10 +1201,23 @@ impl App {
             return;
         }
         let mut close = false;
+        if self.icon.is_none() {
+            if let Ok(img) = image::load_from_memory(ICON_PNG) {
+                let rgba = img.to_rgba8();
+                let size = [rgba.width() as usize, rgba.height() as usize];
+                let pixels = egui::ColorImage::from_rgba_unmultiplied(size, rgba.as_raw());
+                self.icon =
+                    Some(ctx.load_texture("app-icon", pixels, egui::TextureOptions::LINEAR));
+            }
+        }
+        let icon = self.icon.clone();
         egui::Modal::new(egui::Id::unique("about")).show(ctx, |ui| {
             let pal = palette(ui);
             ui.set_width(380.0);
             ui.vertical_centered(|ui| {
+                if let Some(icon) = &icon {
+                    ui.add(egui::Image::new(icon).fit_to_exact_size(vec2(112.0, 112.0)));
+                }
                 ui.label(theme::title(APP_NAME, 20.0));
                 ui.label(
                     RichText::new(format!("Version {}", env!("CARGO_PKG_VERSION"))).color(pal.weak),

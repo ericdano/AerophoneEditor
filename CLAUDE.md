@@ -12,6 +12,7 @@ Protocol research: `AE30_SYSEX_NOTES.md`. Cargo workspace in `rust/`.
 - `AE30_SCREENSHOT=out.png [AE30_TAB=scene|part|effects|controllers|tone|system] [AE30_PICKER=1] ae30edit` - open, wait until loaded, save a PNG of the window, quit.
 - `scripts/build-macos.sh` - universal `target/macos/AE-30 Patch Editor.app` + `.dmg` (ad-hoc signed unless a Developer ID is in the keychain; `logo.icns` used if added to `ae30-app/assets/icons/`)
 - `scripts/build-windows.sh` - cross-compile `target/windows/AE30PatchEditor-<version>-windows-x64.zip` (needs `x86_64-pc-windows-gnu` + `brew install mingw-w64`; linker in `rust/.cargo/config.toml`). Untested on a real Windows PC so far.
+- `python3 scripts/make-icons.py` - regenerate `ae30-app/assets/icons/logo.png`/`.icns`/`.ico` from `icon-source.png` (needs Pillow; `ae30-app/build.rs` embeds the `.ico` and version info in Windows builds only)
 - `python3 tools/gen_data.py <aerophoneCompanion>/app/data.js` - regenerate `ae30-core/data/ae30.json`.
 
 ## Layout

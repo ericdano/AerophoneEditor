@@ -21,3 +21,6 @@ muda = "0.21.2"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_System_Console"] }
+
+[build-dependencies]
+embed-resource = "3.0.12"
