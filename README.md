@@ -7,17 +7,29 @@ Copyright © 2027 Eric Dannewitz. If you find it useful, you can [buy me a coffe
 ## Features
 
 - **Scene:** a five-part mixer with level, pan, octave and reverb/chorus/delay sends, plus tempo, transpose, bend and bite ranges, control sources and harmony.
-- <img src="docs/images/scene.png" width="49%"> <img src="docs/images/scene.png" width="49%">
+
+  <img src="docs/images/scene.png" width="70%">
+
 - **Parts:** every part setting, including tuning, sound offsets, mono/poly, portamento, key and velocity ranges, X-Fade, scale tune, receive switches and part EQ.
-- - <img src="docs/images/parts.png" width="49%"> <img src="docs/images/parts.png" width="49%">
+
+  <img src="docs/images/parts.png" width="70%">
+
 - **Effects:** a signal-flow overview and the controls for each type of the part MFX, IFX, chorus, delay and reverb.
-- - <img src="docs/images/effects.png" width="49%"> <img src="docs/images/effects.png" width="49%">
+
+  <img src="docs/images/effects.png" width="70%">
+
 - **Controllers:** breath, bite, S1/S2, side keys, wheel, thumb pad and motion, for both the internal sound and MIDI Out, each with its response curve.
-- - <img src="docs/images/controllers.png" width="49%"> <img src="docs/images/controllers.png" width="49%">
+
+  <img src="docs/images/controllers.png" width="70%">
+
 - **Tone:** a ZEN-Core tone editor covering oscillators, pitch, filter, amp, envelopes you can drag, two LFOs, matrix control, partial EQ, structure and the tone's effect.
-- - <img src="docs/images/tone.png" width="49%"> <img src="docs/images/tone.png" width="49%">
+
+  <img src="docs/images/tone.png" width="70%">
+
 - **System:** the instrument's global settings.
-- - <img src="docs/images/system.png" width="49%"> <img src="docs/images/system.png" width="49%">
+
+  <img src="docs/images/system.png" width="70%">
+
 - **Library:**
   - searchable user and preset scene lists
   - saving to a user scene or user tone
