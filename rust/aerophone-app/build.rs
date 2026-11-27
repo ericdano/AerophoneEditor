@@ -42,7 +42,7 @@ BEGIN
       VALUE "FileDescription", "Aerophone Editor - scene and tone editor for the Roland Aerophone Pro AE-30"
       VALUE "FileVersion", "{version}"
       VALUE "InternalName", "aerophoneeditor"
-      VALUE "LegalCopyright", "Copyright 2027 Eric Dannewitz. GPL-3.0-or-later."
+      VALUE "LegalCopyright", "Copyright 2027 Eric Dannewitz. PolyForm Strict 1.0.0."
       VALUE "OriginalFilename", "AerophoneEditor.exe"
       VALUE "ProductName", "Aerophone Editor"
       VALUE "ProductVersion", "{version}"

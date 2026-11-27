@@ -8,6 +8,7 @@
 
 ### Changed
 
+- **New license:** the source is now under the PolyForm Strict License 1.0.0 (read and use noncommercially; no changes or redistribution). v0.4.0 and earlier stay under the GPL v3.
 - **Bigger knobs on the Live tab:** the four effect cards grow with the window and switch to a 2×2 grid on tall screens.
 - **Notices a disconnected AE-30:** when the USB cable is pulled or Bluetooth drops, the app now shows the connection screen and reconnects by itself when the AE-30 is back. Before, it kept showing the old connection.
 - **New name: Aerophone Editor.** The app, its files (`AerophoneEditor.exe`, `AerophoneEditor-<version>.dmg`), the command-line tool (`aerophoneeditor`) and the GitHub repository (`ericdano/AerophoneEditor`; the old address redirects) are renamed. The app ID is now `com.ericdannewitz.aerophoneeditor`. Your settings, setlists and preset name cache move to the new settings folder automatically on first launch.
