@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **Fold away the side panels on the Live tab:** the « and » buttons hide the scene list and the setlist, so the effect knobs get the whole window. A thin strip at the edge opens them again, and the app remembers your choice. Page-turner pedals keep stepping through the setlist while it's hidden.
+
 ## v0.5.0 — 2026-11-26
 
 The editor is now called Aerophone Editor, the Mac version is signed and notarized by Apple, and a demo mode lets you try it without an AE-30.

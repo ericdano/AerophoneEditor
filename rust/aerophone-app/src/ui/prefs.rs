@@ -49,6 +49,9 @@ pub struct Prefs {
     pub hide_empty: bool,
     /// The tab that was open last; the app opens on it.
     pub tab: Tab,
+    /// Live tab: whether the scene library and setlist panels are open.
+    pub live_library: bool,
+    pub live_setlist: bool,
 }
 
 impl Default for Prefs {
@@ -59,6 +62,8 @@ impl Default for Prefs {
             knob_speed: KnobSpeed::Normal,
             hide_empty: false,
             tab: Tab::Live,
+            live_library: true,
+            live_setlist: true,
         }
     }
 }
@@ -106,6 +111,8 @@ impl Prefs {
                     }
                 }
                 "hide_empty" => p.hide_empty = v == "1",
+                "live_library" => p.live_library = v != "0",
+                "live_setlist" => p.live_setlist = v != "0",
                 "tab" => {
                     if let Some(t) = Tab::from_key(v) {
                         p.tab = t;
@@ -130,7 +137,12 @@ impl Prefs {
             self.knob_speed.key(),
             u8::from(self.hide_empty),
         );
-        t += &format!("tab={}\n", self.tab.key());
+        t += &format!(
+            "tab={}\nlive_library={}\nlive_setlist={}\n",
+            self.tab.key(),
+            u8::from(self.live_library),
+            u8::from(self.live_setlist)
+        );
         t
     }
 
@@ -166,6 +178,8 @@ mod tests {
             knob_speed: KnobSpeed::Slow,
             hide_empty: true,
             tab: Tab::Effects,
+            live_library: false,
+            live_setlist: true,
         };
         assert_eq!(Prefs::parse(&p.to_text()), p);
         assert_eq!(

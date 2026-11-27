@@ -200,6 +200,13 @@ impl App {
         }
     }
 
+    /// Open or fold the Live tab's scene list and setlist panels.
+    fn set_live_panels(&mut self, library: bool, setlist: bool) {
+        self.prefs.live_library = library;
+        self.prefs.live_setlist = setlist;
+        self.prefs.save();
+    }
+
     fn connect_demo(&mut self, ctx: &egui::Context) {
         let c = ctx.clone();
         self.ed
@@ -459,6 +466,17 @@ impl App {
                 &mut self.view.lib_user,
                 &[(true, "User"), (false, "Presets")],
             );
+            if self.view.tab == Tab::Live {
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    if ui
+                        .button("«")
+                        .on_hover_text("Hide the scene list")
+                        .clicked()
+                    {
+                        self.set_live_panels(false, self.prefs.live_setlist);
+                    }
+                });
+            }
         });
         ui.add(
             egui::TextEdit::singleline(&mut self.view.lib_search)
@@ -633,6 +651,9 @@ impl App {
         // Setlist picker and its menu.
         let mut pick = None;
         ui.horizontal(|ui| {
+            if ui.button("»").on_hover_text("Hide the setlist").clicked() {
+                self.set_live_panels(self.prefs.live_library, false);
+            }
             ui.label(theme::section(ui, "Setlist"));
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 ui.menu_button("⋯", |ui| {
@@ -2066,22 +2087,59 @@ impl eframe::App for App {
         egui::Panel::bottom("status")
             .frame(bar.inner_margin(egui::Margin::symmetric(14, 5)))
             .show(ui, |ui| self.status_bar(ui));
+        let live = self.view.tab == Tab::Live;
+        // On the Live tab either side panel can be folded into a thin strip.
+        let strip = |ui: &mut Ui, id: &'static str, left: bool, text: &str, tip: &str| {
+            let frame = bar.inner_margin(egui::Margin::symmetric(4, 10));
+            let mut open = false;
+            let mut show = |ui: &mut Ui| {
+                ui.vertical_centered(|ui| {
+                    open = ui.button(text).on_hover_text(tip).clicked();
+                });
+            };
+            if left {
+                egui::Panel::left(id)
+                    .frame(frame)
+                    .resizable(false)
+                    .exact_size(36.0)
+                    .show(ui, |ui| show(ui));
+            } else {
+                egui::Panel::right(id)
+                    .frame(frame)
+                    .resizable(false)
+                    .exact_size(36.0)
+                    .show(ui, |ui| show(ui));
+            }
+            open
+        };
         if self.ed.is_online() {
-            egui::Panel::left("library")
-                .frame(bar.inner_margin(egui::Margin::symmetric(10, 6)))
-                .resizable(true)
-                .default_size(250.0)
-                .min_size(200.0)
-                .show(ui, |ui| self.library(ui));
+            if live && !self.prefs.live_library {
+                if strip(ui, "library_strip", true, "»", "Show the scene list") {
+                    self.set_live_panels(true, self.prefs.live_setlist);
+                }
+            } else {
+                egui::Panel::left("library")
+                    .frame(bar.inner_margin(egui::Margin::symmetric(10, 6)))
+                    .resizable(true)
+                    .default_size(250.0)
+                    .min_size(200.0)
+                    .show(ui, |ui| self.library(ui));
+            }
         }
-        if self.ed.is_online() && self.view.tab == Tab::Live {
+        if self.ed.is_online() && live {
             self.playlist_keys(&ctx);
-            egui::Panel::right("playlist")
-                .frame(bar.inner_margin(egui::Margin::symmetric(10, 6)))
-                .resizable(true)
-                .default_size(280.0)
-                .min_size(220.0)
-                .show(ui, |ui| self.playlist(ui));
+            if !self.prefs.live_setlist {
+                if strip(ui, "playlist_strip", false, "«", "Show the setlist") {
+                    self.set_live_panels(self.prefs.live_library, true);
+                }
+            } else {
+                egui::Panel::right("playlist")
+                    .frame(bar.inner_margin(egui::Margin::symmetric(10, 6)))
+                    .resizable(true)
+                    .default_size(280.0)
+                    .min_size(220.0)
+                    .show(ui, |ui| self.playlist(ui));
+            }
         }
         let page = egui::Frame::new()
             .fill(pal.bg)
