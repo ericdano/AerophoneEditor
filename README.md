@@ -5,7 +5,10 @@ A scene and tone editor for the Roland Aerophone Pro AE-30 (and AE-20), written 
 Copyright © 2027 Eric Dannewitz. If you find it useful, you can [buy me a coffee](https://buymeacoffee.com/ericdannewitz).
 
 ## Features
+- **Live:** a performance screen with the scene's name, big knobs for reverb, chorus, delay and Color (the insert effect) with a type menu under each, and sliders for level and dark/bright. On the right, named setlists hold your scenes for each gig (create, rename, switch and delete them from the setlist menu; Select lets you tick entries to remove, or clear a whole setlist); click an entry, or use the arrow keys or Page Up/Down (most page-turner pedals send these), to switch. Each entry keeps its own copy of the scene, including tweaks you make while it plays. Nothing is stored until you pick an edited entry again: it is then saved in an empty user scene, counting down from U12-50 (only slots named INIT SCENE are used), so later picks are instant.
 
+  <img src="docs/images/live.png" width="70%">
+  
 - **Scene:** a five-part mixer with level, pan, octave and reverb/chorus/delay sends, plus tempo, transpose, bend and bite ranges, control sources and harmony.
 
   <img src="docs/images/scene.png" width="70%">
@@ -25,10 +28,6 @@ Copyright © 2027 Eric Dannewitz. If you find it useful, you can [buy me a coffe
 - **Tone:** a ZEN-Core tone editor covering oscillators, pitch, filter, amp, envelopes you can drag, two LFOs, matrix control, partial EQ, structure and the tone's effect.
 
   <img src="docs/images/tone.png" width="70%">
-
-- **Live:** a performance screen with the scene's name, big knobs for reverb, chorus, delay and Color (the insert effect) with a type menu under each, and sliders for level and dark/bright. On the right, named setlists hold your scenes for each gig (create, rename, switch and delete them from the setlist menu; Select lets you tick entries to remove, or clear a whole setlist); click an entry, or use the arrow keys or Page Up/Down (most page-turner pedals send these), to switch. Each entry keeps its own copy of the scene, including tweaks you make while it plays. Nothing is stored until you pick an edited entry again: it is then saved in an empty user scene, counting down from U12-50 (only slots named INIT SCENE are used), so later picks are instant.
-
-  <img src="docs/images/live.png" width="70%">
 
 - **System:** the instrument's global settings.
 
