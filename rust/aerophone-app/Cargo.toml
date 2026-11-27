@@ -1,11 +1,11 @@
 [package]
-name = "ae30-app"
+name = "aerophone-app"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [dependencies]
-ae30-core = { path = "../ae30-core" }
+aerophone-core = { path = "../aerophone-core" }
 midir = "0.11.1"
 eframe = "0.37.0"
 rfd = "0.18.0"
@@ -13,7 +13,7 @@ directories = "6.0.0"
 image = { version = "0.25", default-features = false, features = ["png"] }
 
 [[bin]]
-name = "ae30edit"
+name = "aerophoneeditor"
 path = "src/main.rs"
 
 [target.'cfg(target_os = "macos")'.dependencies]

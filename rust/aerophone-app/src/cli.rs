@@ -1,34 +1,34 @@
-//! Command-line tools (`ae30edit <command>`), for checking the connection and
+//! Command-line tools (`aerophoneeditor <command>`), for checking the connection and
 //! backing up without the GUI. Only `backup` and the read commands exist
 //! here; nothing in this file writes to the instrument's memory.
 
 use std::time::{Duration, Instant};
 
-use ae30_core::image::{Area, Image};
-use ae30_core::params::data;
-use ae30_core::session::{Event, Session};
-use ae30_core::sysex::{addr, Addr, Identity};
+use aerophone_core::image::{Area, Image};
+use aerophone_core::params::data;
+use aerophone_core::session::{Event, Session};
+use aerophone_core::sysex::{addr, Addr, Identity};
 
 use crate::midi::{self, Link};
 
 const LIMIT: Duration = Duration::from_secs(6);
 
 pub const USAGE: &str = "\
-ae30edit — Roland Aerophone AE-30 editor
+aerophoneeditor — Roland Aerophone AE-30 editor
 
 USAGE:
-  ae30edit                               open the editor
-  ae30edit ports                         list MIDI ports
-  ae30edit probe                         identify the AE-30, show the current scene
-  ae30edit scene                         read the whole Temporary Scene, list its settings
-  ae30edit names [user|preset]           list scene names
-  ae30edit read AA BB CC DD SIZE         hex-dump bytes (address and plain size in hex)
-  ae30edit backup FILE.syx [FIRST LAST]  save user scenes FIRST..LAST (1-600) to a .syx file
-  ae30edit restore FILE.syx [SLOT] [--yes]
+  aerophoneeditor                               open the editor
+  aerophoneeditor ports                         list MIDI ports
+  aerophoneeditor probe                         identify the AE-30, show the current scene
+  aerophoneeditor scene                         read the whole Temporary Scene, list its settings
+  aerophoneeditor names [user|preset]           list scene names
+  aerophoneeditor read AA BB CC DD SIZE         hex-dump bytes (address and plain size in hex)
+  aerophoneeditor backup FILE.syx [FIRST LAST]  save user scenes FIRST..LAST (1-600) to a .syx file
+  aerophoneeditor restore FILE.syx [SLOT] [--yes]
                                          write a backup's scenes back to their user slots (or
                                          one after another from SLOT, 1-600) and check each;
                                          without --yes, only shows what would be written
-  ae30edit stream-test                   time reading one scene with a single request
+  aerophoneeditor stream-test                   time reading one scene with a single request
 
 Option: --port TEXT  use the MIDI port whose name contains TEXT
 (default: tries \"AE-30\", \"Aerophone\", \"AE-20\").";
@@ -122,7 +122,7 @@ fn probe(hints: &[&str]) -> Result<(), String> {
     let mut setup = Image::new(Area::Setup);
     load(&mut link, &mut s, &mut setup)?;
     let st = &setup.blocks[0];
-    let scene = ae30_core::scene::SceneRef::from_bank(
+    let scene = aerophone_core::scene::SceneRef::from_bank(
         st.raw(0).unwrap_or(0),
         st.raw(1).unwrap_or(0),
         st.raw(2).unwrap_or(0),
@@ -145,7 +145,7 @@ fn print_parts(img: &Image) {
         let tone = data()
             .tone_name(msb, lsb, pc)
             .map(String::from)
-            .unwrap_or_else(|| ae30_core::scene::tone_bank_name(msb, lsb));
+            .unwrap_or_else(|| aerophone_core::scene::tone_bank_name(msb, lsb));
         println!(
             "  Part {n} {:<3} {:<24} level {:>3}",
             if b.raw(1) == Some(1) { "on" } else { "-" },
@@ -219,7 +219,7 @@ fn read(hints: &[&str], args: &[String]) -> Result<(), String> {
         .collect::<Result<_, _>>()
         .map_err(|e| format!("bad hex number: {e}"))?;
     let [a, b, c, d, size] = nums[..] else {
-        return Err("usage: ae30edit read AA BB CC DD SIZE".into());
+        return Err("usage: aerophoneeditor read AA BB CC DD SIZE".into());
     };
     if [a, b, c, d].iter().any(|&x| x > 0x7F) || size == 0 {
         return Err("address bytes must be 00-7F and SIZE non-zero".into());
@@ -345,7 +345,7 @@ fn editor_test(port: Option<&str>) -> Result<(), String> {
 /// and returns to the original scene.
 fn playlist_test(port: Option<&str>, args: &[String]) -> Result<(), String> {
     use crate::editor::{restore_plan, Editor, Playlist};
-    use ae30_core::scene::SceneRef;
+    use aerophone_core::scene::SceneRef;
     let file = args.first().ok_or("usage: playlist-test BACKUP.syx")?;
     let slot = 599u16;
     let mut ed = Editor::new();
@@ -432,7 +432,7 @@ fn playlist_test(port: Option<&str>, args: &[String]) -> Result<(), String> {
 
     // Put U12-50 back and go home.
     let bytes = std::fs::read(file).map_err(|e| e.to_string())?;
-    let items = restore_plan(ae30_core::syx::scenes_from_syx(&bytes), None)?;
+    let items = restore_plan(aerophone_core::syx::scenes_from_syx(&bytes), None)?;
     ed.start_restore(items);
     run(&mut ed, "U12-50 restored", 60, &idle)?;
     ed.select_scene(original[0], original[1], original[2]);
@@ -484,7 +484,7 @@ fn backup(port: Option<&str>, args: &[String]) -> Result<(), String> {
     use crate::editor::{Conn, Editor};
     let file = args
         .first()
-        .ok_or("usage: ae30edit backup FILE.syx [FIRST LAST]")?;
+        .ok_or("usage: aerophoneeditor backup FILE.syx [FIRST LAST]")?;
     let num = |i: usize, d: u16| -> Result<u16, String> {
         args.get(i)
             .map_or(Ok(d), |a| a.parse().map_err(|_| format!("bad number {a}")))
@@ -604,7 +604,7 @@ fn restore(port: Option<&str>, args: &[String]) -> Result<(), String> {
     let args: Vec<&String> = args.iter().filter(|a| *a != "--yes").collect();
     let file = args
         .first()
-        .ok_or("usage: ae30edit restore FILE.syx [SLOT] [--yes]")?;
+        .ok_or("usage: aerophoneeditor restore FILE.syx [SLOT] [--yes]")?;
     let start = match args.get(1) {
         Some(a) => Some(
             a.parse::<u16>()
@@ -616,7 +616,7 @@ fn restore(port: Option<&str>, args: &[String]) -> Result<(), String> {
         None => None,
     };
     let bytes = std::fs::read(file.as_str()).map_err(|e| format!("{file}: {e}"))?;
-    let plan = restore_plan(ae30_core::syx::scenes_from_syx(&bytes), start)?;
+    let plan = restore_plan(aerophone_core::syx::scenes_from_syx(&bytes), start)?;
 
     let mut ed = Editor::new();
     ed.connect(port, None);
@@ -790,7 +790,7 @@ fn system_set(port: Option<&str>, args: &[String]) -> Result<(), String> {
         return Err("usage: system-set LABEL VALUE".into());
     };
     let value: i32 = value.parse().map_err(|_| "bad value")?;
-    let p = ae30_core::data()
+    let p = aerophone_core::data()
         .table("Sys_common")
         .named(label)
         .ok_or(format!("no System setting called {label}"))?;

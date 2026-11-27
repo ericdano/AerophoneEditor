@@ -10,12 +10,12 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use ae30_core::image::{name_bytes, Area, Image};
-use ae30_core::params::{data, Param};
-use ae30_core::scene::SceneRef;
-use ae30_core::session::{Event, SceneName, Session};
-use ae30_core::sysex::{Addr, Identity, Model};
-use ae30_core::syx;
+use aerophone_core::image::{name_bytes, Area, Image};
+use aerophone_core::params::{data, Param};
+use aerophone_core::scene::SceneRef;
+use aerophone_core::session::{Event, SceneName, Session};
+use aerophone_core::sysex::{Addr, Identity, Model};
+use aerophone_core::syx;
 
 use crate::midi::{self, Link, Waker};
 
@@ -203,7 +203,7 @@ pub fn restore_plan(
 /// - values outside their documented range, which it replaces with valid ones;
 /// - parameters of an effect whose type is Thru/Off (type 0), which it
 ///   resets to its own defaults (seen in factory INIT scenes).
-fn invalid_in_file(b: &ae30_core::image::Block, off: usize) -> bool {
+fn invalid_in_file(b: &aerophone_core::image::Block, off: usize) -> bool {
     let Some(p) = b
         .table
         .params
@@ -736,7 +736,11 @@ impl Editor {
         if let Some(n) = data().tone_name(msb, lsb, pc) {
             return n.to_string();
         }
-        format!("{} #{}", ae30_core::scene::tone_bank_name(msb, lsb), pc + 1)
+        format!(
+            "{} #{}",
+            aerophone_core::scene::tone_bank_name(msb, lsb),
+            pc + 1
+        )
     }
 
     pub fn value(&self, t: Target, block: &str, p: &Param) -> Option<i32> {
@@ -1262,7 +1266,7 @@ impl Editor {
 // ---- preset name cache (presets never change, and listing them is slow) ----
 
 fn cache_path() -> Option<std::path::PathBuf> {
-    let dirs = directories::ProjectDirs::from("com.github", "ericdano", "AE30PatchEditor")?;
+    let dirs = crate::paths::dirs()?;
     Some(dirs.cache_dir().join("preset-scenes.txt"))
 }
 

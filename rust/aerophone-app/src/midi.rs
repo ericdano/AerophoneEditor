@@ -10,13 +10,13 @@ use std::time::{Duration, Instant};
 
 pub type Waker = Box<dyn Fn() + Send + Sync>;
 
-use ae30_core::session::{Event, Session};
+use aerophone_core::session::{Event, Session};
 use midir::{
     Ignore, MidiInput, MidiInputConnection, MidiInputPort, MidiOutput, MidiOutputConnection,
     MidiOutputPort,
 };
 
-const CLIENT: &str = "AE30PatchEditor";
+const CLIENT: &str = "AerophoneEditor";
 
 /// Names the AE-30 shows up under, depending on OS and driver.
 pub const DEFAULT_PORT_HINTS: [&str; 3] = ["AE-30", "Aerophone", "AE-20"];
@@ -115,7 +115,7 @@ impl Link {
         let input = input
             .connect(
                 &in_port,
-                "AE30PatchEditor In",
+                "AerophoneEditor In",
                 move |_t, msg, _| {
                     let _ = tx.send(msg.to_vec());
                     if let Some(w) = &waker {
@@ -126,7 +126,7 @@ impl Link {
             )
             .map_err(|e| format!("MIDI In \"{in_label}\": {e}"))?;
         let output = output
-            .connect(&out_port, "AE30PatchEditor Out")
+            .connect(&out_port, "AerophoneEditor Out")
             .map_err(|e| format!("MIDI Out \"{out_label}\": {e}"))?;
 
         Ok(Link {

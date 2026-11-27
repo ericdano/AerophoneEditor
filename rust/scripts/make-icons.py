@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Make the app icons from the artwork in ae30-app/assets/icons/icon-source.png.
+"""Make the app icons from the artwork in aerophone-app/assets/icons/icon-source.png.
 
     python3 rust/scripts/make-icons.py [source.png]
 
@@ -20,7 +20,7 @@ from pathlib import Path
 
 from PIL import Image
 
-ICONS = Path(__file__).resolve().parent.parent / "ae30-app" / "assets" / "icons"
+ICONS = Path(__file__).resolve().parent.parent / "aerophone-app" / "assets" / "icons"
 CANVAS = 1024
 
 

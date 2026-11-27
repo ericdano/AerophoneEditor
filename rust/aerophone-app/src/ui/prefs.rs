@@ -1,6 +1,6 @@
 //! Preferences, kept as `key=value` lines in `prefs.txt` in the OS config
-//! folder (macOS: ~/Library/Application Support/com.github.ericdano.AE30PatchEditor,
-//! Windows: %APPDATA%\ericdano\AE30PatchEditor\config).
+//! folder (macOS: ~/Library/Application Support/com.ericdannewitz.AerophoneEditor,
+//! Windows: %APPDATA%\ericdannewitz\AerophoneEditor\config).
 
 use eframe::egui::Color32;
 
@@ -60,7 +60,7 @@ impl Default for Prefs {
 }
 
 fn path() -> Option<std::path::PathBuf> {
-    let dirs = directories::ProjectDirs::from("com.github", "ericdano", "AE30PatchEditor")?;
+    let dirs = crate::paths::dirs()?;
     Some(dirs.config_dir().join("prefs.txt"))
 }
 

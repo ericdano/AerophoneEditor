@@ -2,7 +2,7 @@
 
 ## aerophoneCompanion (parameter data)
 
-`rust/ae30-core/data/ae30.json` is generated from the `app/data.js` file of https://github.com/wrongwaycorrigan/aerophoneCompanion, used under this licence:
+`rust/aerophone-core/data/ae30.json` is generated from the `app/data.js` file of https://github.com/wrongwaycorrigan/aerophoneCompanion, used under this licence:
 
 ```
 MIT License
@@ -40,4 +40,4 @@ own code and does not grant any rights in Roland's trademarks or documents.
 
 ## Inter font
 
-`rust/ae30-app/assets/fonts/Inter-*.ttf` are under the SIL Open Font License 1.1; see `rust/ae30-app/assets/fonts/Inter-LICENSE.txt`.
+`rust/aerophone-app/assets/fonts/Inter-*.ttf` are under the SIL Open Font License 1.1; see `rust/aerophone-app/assets/fonts/Inter-LICENSE.txt`.

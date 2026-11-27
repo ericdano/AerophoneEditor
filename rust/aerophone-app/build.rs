@@ -39,12 +39,12 @@ BEGIN
     BLOCK "040904b0"
     BEGIN
       VALUE "CompanyName", "Eric Dannewitz"
-      VALUE "FileDescription", "AE-30 Patch Editor - scene and tone editor for the Roland Aerophone Pro AE-30"
+      VALUE "FileDescription", "Aerophone Editor - scene and tone editor for the Roland Aerophone Pro AE-30"
       VALUE "FileVersion", "{version}"
-      VALUE "InternalName", "ae30edit"
+      VALUE "InternalName", "aerophoneeditor"
       VALUE "LegalCopyright", "Copyright 2027 Eric Dannewitz. GPL-3.0-or-later."
-      VALUE "OriginalFilename", "AE30PatchEditor.exe"
-      VALUE "ProductName", "AE-30 Patch Editor"
+      VALUE "OriginalFilename", "AerophoneEditor.exe"
+      VALUE "ProductName", "Aerophone Editor"
       VALUE "ProductVersion", "{version}"
     END
   END
@@ -55,7 +55,7 @@ BEGIN
 END
 "#
     );
-    let out = Path::new(&env::var("OUT_DIR").unwrap()).join("ae30edit.rc");
+    let out = Path::new(&env::var("OUT_DIR").unwrap()).join("aerophoneeditor.rc");
     fs::write(&out, rc).unwrap();
     embed_resource::compile(&out, embed_resource::NONE)
         .manifest_required()

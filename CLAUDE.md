@@ -1,24 +1,24 @@
-# AE30PatchEditor
+# AerophoneEditor
 
 Rust GUI patch/scene editor for the Roland Aerophone Pro AE-30 over MIDI SysEx (Roland RQ1/DT1).
 Protocol research: `AE30_SYSEX_NOTES.md`. Cargo workspace in `rust/`.
 
 ## Commands (run in `rust/`)
 
-- `cargo run --bin ae30edit` - the editor (connects to the AE-30 automatically)
+- `cargo run --bin aerophoneeditor` - the editor (connects to the AE-30 automatically)
 - `cargo test` / `cargo fmt` / `cargo clippy --all-targets` - keep all clean
-- CLI tools (`ae30edit help`): `ports`, `probe`, `scene`, `names [user|preset]`, `read AA BB CC DD SIZE` (hex, plain size), `backup FILE.syx [FIRST LAST]`, `restore FILE.syx [SLOT] [--yes]` (writes! dry run without `--yes`), `tone-names`, `system-set LABEL VALUE` (stores System!), `stream-test`, `editor-test` (drives the GUI model headless), `edit-test` (Temp Scene write/read-back/restore), `playlist-test FILE.syx` (Live playlist on the unit: backs up U12-50 if empty, stores/selects an edited entry there, restores it). Experiments: `poke-temp BB CC VAL`, `poke-user SLOT BB CC VAL` (writes a stored scene!), `listen` (is the unit streaming?).
+- CLI tools (`aerophoneeditor help`): `ports`, `probe`, `scene`, `names [user|preset]`, `read AA BB CC DD SIZE` (hex, plain size), `backup FILE.syx [FIRST LAST]`, `restore FILE.syx [SLOT] [--yes]` (writes! dry run without `--yes`), `tone-names`, `system-set LABEL VALUE` (stores System!), `stream-test`, `editor-test` (drives the GUI model headless), `edit-test` (Temp Scene write/read-back/restore), `playlist-test FILE.syx` (Live playlist on the unit: backs up U12-50 if empty, stores/selects an edited entry there, restores it). Experiments: `poke-temp BB CC VAL`, `poke-user SLOT BB CC VAL` (writes a stored scene!), `listen` (is the unit streaming?).
 - Test writes only on empty slots (check `names user`; U03-01 is the user's), back them up first, put them back after.
-- `AE30_SCREENSHOT=out.png [AE30_TAB=scene|part|effects|controllers|tone|system|live] [AE30_PICKER=1] ae30edit` - open, wait until loaded, save a PNG of the window, quit.
-- `scripts/build-macos.sh` - universal `target/macos/AE-30 Patch Editor.app` + `.dmg` (ad-hoc signed unless a Developer ID is in the keychain; `logo.icns` used if added to `ae30-app/assets/icons/`)
-- `scripts/build-windows.sh` - cross-compile `target/windows/AE30PatchEditor-<version>-windows-x64.zip` (needs `x86_64-pc-windows-gnu` + `brew install mingw-w64`; linker in `rust/.cargo/config.toml`). Untested on a real Windows PC so far.
-- `python3 scripts/make-icons.py` - regenerate `ae30-app/assets/icons/logo.png`/`.icns`/`.ico` from `icon-source.png` (needs Pillow; `ae30-app/build.rs` embeds the `.ico` and version info in Windows builds only)
-- `python3 tools/gen_data.py <aerophoneCompanion>/app/data.js` - regenerate `ae30-core/data/ae30.json`.
+- `AE30_SCREENSHOT=out.png [AE30_TAB=scene|part|effects|controllers|tone|system|live] [AE30_PICKER=1] aerophoneeditor` - open, wait until loaded, save a PNG of the window, quit.
+- `scripts/build-macos.sh` - universal `target/macos/Aerophone Editor.app` + `.dmg` (ad-hoc signed unless a Developer ID is in the keychain; `logo.icns` used if added to `aerophone-app/assets/icons/`)
+- `scripts/build-windows.sh` - cross-compile `target/windows/AerophoneEditor-<version>-windows-x64.zip` (needs `x86_64-pc-windows-gnu` + `brew install mingw-w64`; linker in `rust/.cargo/config.toml`). Untested on a real Windows PC so far.
+- `python3 scripts/make-icons.py` - regenerate `aerophone-app/assets/icons/logo.png`/`.icns`/`.ico` from `icon-source.png` (needs Pillow; `aerophone-app/build.rs` embeds the `.ico` and version info in Windows builds only)
+- `python3 tools/gen_data.py <aerophoneCompanion>/app/data.js` - regenerate `aerophone-core/data/ae30.json`.
 
 ## Layout
 
-- `ae30-core` (no MIDI, unit-tested): `sysex` (framing, checksum, `Addr` 7-bit math, nibbles, identity), `params` (loads `data/ae30.json`: every block's params, encoding, ranges, labels, options, display `Format`, effect-type-specific params), `image` (`Area` + `Image`: local copy of an area as named blocks; DT1 data placed by address), `session` (I/O-free state machine: paced output, merged edits, one job in flight, streamed reads, scene/tone name lists, write commands), `syx` (scene files and backups), plus older `map`/`read`/`scene` helpers.
-- `ae30-app`: `midi` (midir ports, `Link::pump/run`), `editor` (GUI-free model: connection, loading, live edits + undo, follows panel changes, save/import/export/backup), `cli`, `ui/` (egui 0.37: `mod.rs` window, library, dialogs, tone picker; `pages.rs` Scene/Parts/Effects/Controllers/Tone/System; `widgets.rs` param controls, knob, fader, draggable envelope, assign curve; `theme.rs`).
+- `aerophone-core` (no MIDI, unit-tested): `sysex` (framing, checksum, `Addr` 7-bit math, nibbles, identity), `params` (loads `data/ae30.json`: every block's params, encoding, ranges, labels, options, display `Format`, effect-type-specific params), `image` (`Area` + `Image`: local copy of an area as named blocks; DT1 data placed by address), `session` (I/O-free state machine: paced output, merged edits, one job in flight, streamed reads, scene/tone name lists, write commands), `syx` (scene files and backups), plus older `map`/`read`/`scene` helpers.
+- `aerophone-app`: `midi` (midir ports, `Link::pump/run`), `editor` (GUI-free model: connection, loading, live edits + undo, follows panel changes, save/import/export/backup), `cli`, `ui/` (egui 0.37: `mod.rs` window, library, dialogs, tone picker; `pages.rs` Scene/Parts/Effects/Controllers/Tone/System; `widgets.rs` param controls, knob, fader, draggable envelope, assign curve; `theme.rs`).
 - Parameter data comes from aerophoneCompanion (MIT), which parsed Roland's PDFs. Credit it if distributing.
 
 ## Gotchas

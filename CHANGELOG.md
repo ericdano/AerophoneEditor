@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **New name: Aerophone Editor.** The app, its files (`AerophoneEditor.exe`, `AerophoneEditor-<version>.dmg`), the command-line tool (`aerophoneeditor`) and the GitHub repository (`ericdano/AerophoneEditor`; the old address redirects) are renamed. The app ID is now `com.ericdannewitz.aerophoneeditor`. Your settings, setlists and preset name cache move to the new settings folder automatically on first launch.
+
 ## v0.4.0 — 2026-11-26
 
 The Live tab now keeps several named setlists, and you can remove entries in bulk.

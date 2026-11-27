@@ -4,7 +4,7 @@ use std::collections::HashSet;
 
 use eframe::egui::{self, vec2, Align, Layout, RichText, Ui};
 
-use ae30_core::params::{data, Param, Table};
+use aerophone_core::params::{data, Param, Table};
 
 use super::theme::{self, palette};
 use super::widgets::{self, Env};
@@ -365,7 +365,7 @@ fn fx_block(sel: FxSel) -> (String, &'static str, u32) {
     }
 }
 
-fn fx_types(kind: &str) -> &'static [ae30_core::params::FxType] {
+fn fx_types(kind: &str) -> &'static [aerophone_core::params::FxType] {
     let fx = &data().fx;
     match kind {
         "mfx" => &fx.mfx,

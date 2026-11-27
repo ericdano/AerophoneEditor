@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build "AE-30 Patch Editor.app" and a .dmg for macOS.
+# Build "Aerophone Editor.app" and a .dmg for macOS.
 #
 #   rust/scripts/build-macos.sh
 #
@@ -7,20 +7,20 @@
 # - Signed with a "Developer ID Application" certificate if the keychain has
 #   one, otherwise ad-hoc (fine for your own Mac; others see a warning).
 # - Notarized if NOTARY_PROFILE names a `xcrun notarytool store-credentials` profile.
-# - Uses ae30-app/assets/icons/logo.icns as the icon when it exists.
+# - Uses aerophone-app/assets/icons/logo.icns as the icon when it exists.
 #
-# Output: rust/target/macos/AE-30 Patch Editor.app and AE30PatchEditor-<version>.dmg
+# Output: rust/target/macos/Aerophone Editor.app and AerophoneEditor-<version>.dmg
 set -euo pipefail
 
 cd "$(dirname "$0")/.."            # the rust/ workspace
-NAME="AE-30 Patch Editor"
-EXE=AE30PatchEditor
-BIN=ae30edit
+NAME="Aerophone Editor"
+EXE=AerophoneEditor
+BIN=aerophoneeditor
 OUT=target/macos
 APP="$OUT/$NAME.app"
 META=$(cargo metadata --no-deps --format-version 1)
-VERSION=$(grep -o '"name":"ae30-app","version":"[^"]*"' <<<"$META" | sed 's/.*"version":"//; s/"$//')
-[ -n "$VERSION" ] || { echo "Couldn't read the ae30-app version" >&2; exit 1; }
+VERSION=$(grep -o '"name":"aerophone-app","version":"[^"]*"' <<<"$META" | sed 's/.*"version":"//; s/"$//')
+[ -n "$VERSION" ] || { echo "Couldn't read the aerophone-app version" >&2; exit 1; }
 echo "Building $NAME $VERSION"
 
 # --- compile ---
@@ -40,11 +40,11 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 lipo -create "${BUILT[@]}" -output "$APP/Contents/MacOS/$EXE"
 ICON_KEY=""
-if [ -f ae30-app/assets/icons/logo.icns ]; then
-  cp ae30-app/assets/icons/logo.icns "$APP/Contents/Resources/$EXE.icns"
+if [ -f aerophone-app/assets/icons/logo.icns ]; then
+  cp aerophone-app/assets/icons/logo.icns "$APP/Contents/Resources/$EXE.icns"
   ICON_KEY="<key>CFBundleIconFile</key><string>$EXE</string>"
 fi
-cp ae30-app/assets/fonts/Inter-LICENSE.txt "$APP/Contents/Resources/"
+cp aerophone-app/assets/fonts/Inter-LICENSE.txt "$APP/Contents/Resources/"
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -52,7 +52,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <dict>
   <key>CFBundleName</key><string>$NAME</string>
   <key>CFBundleDisplayName</key><string>$NAME</string>
-  <key>CFBundleIdentifier</key><string>com.github.ericdano.ae30patcheditor</string>
+  <key>CFBundleIdentifier</key><string>com.ericdannewitz.aerophoneeditor</string>
   <key>CFBundleExecutable</key><string>$EXE</string>
   $ICON_KEY
   <key>CFBundlePackageType</key><string>APPL</string>

@@ -14,13 +14,13 @@ use std::time::Duration;
 
 use eframe::egui::{self, vec2, Align, Color32, Layout, RichText, Sense, Ui};
 
-use ae30_core::params::data;
-use ae30_core::scene::SceneRef;
+use aerophone_core::params::data;
+use aerophone_core::scene::SceneRef;
 
 use crate::editor::{Conn, Editor};
 use theme::palette;
 
-pub const APP_NAME: &str = "AE-30 Patch Editor";
+pub const APP_NAME: &str = "Aerophone Editor";
 
 /// The app icon (window, Dock, About box); made by `scripts/make-icons.py`.
 pub const ICON_PNG: &[u8] = include_bytes!("../../assets/icons/logo.png");
@@ -53,7 +53,7 @@ pub struct SaveScene {
 /// The Restore Scenes window: what a chosen `.syx` file holds and where it goes.
 pub struct RestoreUi {
     pub file: String,
-    pub scenes: Vec<(ae30_core::Area, ae30_core::Image)>,
+    pub scenes: Vec<(aerophone_core::Area, aerophone_core::Image)>,
     pub selected: Vec<bool>,
     /// Put backed-up user scenes back in their own slots.
     pub original: bool,
@@ -1170,7 +1170,7 @@ impl App {
                     .warn(format!("Couldn't read {}: {e}", path.display()))
             }
         };
-        let scenes: Vec<_> = ae30_core::syx::scenes_from_syx(&bytes)
+        let scenes: Vec<_> = aerophone_core::syx::scenes_from_syx(&bytes)
             .into_iter()
             .filter(|(_, img)| img.is_loaded())
             .collect();
@@ -1181,7 +1181,7 @@ impl App {
         }
         let original = scenes
             .iter()
-            .all(|(a, _)| matches!(a, ae30_core::Area::UserScene(_)));
+            .all(|(a, _)| matches!(a, aerophone_core::Area::UserScene(_)));
         let start = self
             .ed
             .user_names
@@ -1217,7 +1217,7 @@ impl App {
                         return None;
                     }
                     let t = match (st.original, area) {
-                        (true, ae30_core::Area::UserScene(n)) => Some(*n),
+                        (true, aerophone_core::Area::UserScene(n)) => Some(*n),
                         _ => Some(st.start + k),
                     };
                     k += 1;
@@ -1238,7 +1238,7 @@ impl App {
         let can_original = st
             .scenes
             .iter()
-            .all(|(a, _)| matches!(a, ae30_core::Area::UserScene(_)));
+            .all(|(a, _)| matches!(a, aerophone_core::Area::UserScene(_)));
         egui::Modal::new(egui::Id::unique("restore")).show(ctx, |ui| {
             let pal = palette(ui);
             ui.set_width(560.0);
@@ -1346,7 +1346,7 @@ impl App {
         });
         if go {
             let st = self.view.restore.take().unwrap();
-            let items: Vec<(u16, ae30_core::Image)> = st
+            let items: Vec<(u16, aerophone_core::Image)> = st
                 .scenes
                 .into_iter()
                 .zip(targets)

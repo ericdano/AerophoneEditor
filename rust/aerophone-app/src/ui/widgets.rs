@@ -7,7 +7,7 @@ use eframe::egui::{
     RichText, Sense, Shape, Slider, SliderClamping, Stroke, Ui,
 };
 
-use ae30_core::params::{Kind, Param};
+use aerophone_core::params::{Kind, Param};
 
 use super::theme::{self, palette};
 use crate::editor::{Editor, Target};
@@ -73,7 +73,7 @@ fn parse_value(p: &Param, s: &str) -> Option<f64> {
         .take_while(|c| c.is_ascii_digit() || *c == '-' || *c == '.')
         .collect();
     let x: f64 = num.parse().ok()?;
-    if let Some(ae30_core::params::Format::Lin { add, mul, .. }) = &p.fmt {
+    if let Some(aerophone_core::params::Format::Lin { add, mul, .. }) = &p.fmt {
         if *mul != 0.0 {
             return Some((x / mul - add).round());
         }

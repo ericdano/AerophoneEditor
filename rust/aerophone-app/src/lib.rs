@@ -3,4 +3,5 @@
 pub mod cli;
 pub mod editor;
 pub mod midi;
+pub mod paths;
 pub mod ui;

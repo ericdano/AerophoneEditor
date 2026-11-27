@@ -1,10 +1,10 @@
 use std::time::{Duration, Instant};
 
-use ae30_core::image::{name_bytes, Area, Image};
-use ae30_core::params::{data, Format};
-use ae30_core::session::{cmd, Event, Session};
-use ae30_core::sysex::{self, addr, Addr};
-use ae30_core::syx;
+use aerophone_core::image::{name_bytes, Area, Image};
+use aerophone_core::params::{data, Format};
+use aerophone_core::session::{cmd, Event, Session};
+use aerophone_core::sysex::{self, addr, Addr};
+use aerophone_core::syx;
 
 #[test]
 fn data_loads_and_sizes_match_roland() {

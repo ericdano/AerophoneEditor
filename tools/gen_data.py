@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build rust/ae30-core/data/ae30.json from aerophoneCompanion's app/data.js.
+"""Build rust/aerophone-core/data/ae30.json from aerophoneCompanion's app/data.js.
 
 aerophoneCompanion (MIT, https://github.com/wrongwaycorrigan/aerophoneCompanion)
 parsed Roland's public AE-30/AE-20 MIDI Implementation, Parameter Guide and
@@ -16,7 +16,7 @@ import sys
 
 src = sys.argv[1]
 here = os.path.dirname(os.path.abspath(__file__))
-out = os.path.join(here, '..', 'rust', 'ae30-core', 'data', 'ae30.json')
+out = os.path.join(here, '..', 'rust', 'aerophone-core', 'data', 'ae30.json')
 
 text = open(src, encoding='utf-8').read()
 text = re.sub(r'^\s*window\.AE_DATA\s*=\s*', '', text).rstrip().rstrip(';')

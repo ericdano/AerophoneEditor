@@ -3,7 +3,7 @@
 
 use std::process::ExitCode;
 
-use ae30_app::{cli, ui};
+use aerophone_app::{cli, ui};
 use eframe::egui;
 
 fn main() -> ExitCode {

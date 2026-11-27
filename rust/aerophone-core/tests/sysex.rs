@@ -1,7 +1,7 @@
-use ae30_core::map::{self, Block};
-use ae30_core::read::BlockRead;
-use ae30_core::scene::{SceneCommon, ScenePart, SceneRef, Setup};
-use ae30_core::sysex::*;
+use aerophone_core::map::{self, Block};
+use aerophone_core::read::BlockRead;
+use aerophone_core::scene::{SceneCommon, ScenePart, SceneRef, Setup};
+use aerophone_core::sysex::*;
 
 #[test]
 fn checksum_matches_roland_worked_example() {

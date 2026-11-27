@@ -15,9 +15,9 @@
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
-use ae30_core::image::{Area, Image};
-use ae30_core::scene::SceneRef;
-use ae30_core::syx;
+use aerophone_core::image::{Area, Image};
+use aerophone_core::scene::SceneRef;
+use aerophone_core::syx;
 
 use super::{Editor, SETTLE, TAG_SCENE};
 
@@ -106,8 +106,7 @@ fn same_data(a: &Image, b: &Image) -> bool {
 impl Playlist {
     /// The saved playlist from the OS config folder.
     pub fn load() -> Self {
-        let dir = directories::ProjectDirs::from("com.github", "ericdano", "AE30PatchEditor")
-            .map(|d| d.config_dir().join("playlist"));
+        let dir = crate::paths::dirs().map(|d| d.config_dir().join("playlist"));
         let mut p = Playlist {
             dir: dir.clone(),
             ..Playlist::default()
@@ -196,7 +195,7 @@ impl Playlist {
     }
 
     fn to_text(&self) -> String {
-        let mut s = String::from("# AE-30 Patch Editor setlists\n");
+        let mut s = String::from("# Aerophone Editor setlists\n");
         for (l, list) in self.lists.iter().enumerate() {
             s += &format!("list\t{}\n", list.name.replace(['\t', '\n'], " "));
             for (i, e) in list.entries.iter().enumerate() {
@@ -640,7 +639,7 @@ mod tests {
             img.apply(a, &vec![0; n as usize]);
         }
         let i = img.index("Perf_common").unwrap();
-        img.set_bytes(i, 0, &ae30_core::image::name_bytes(name));
+        img.set_bytes(i, 0, &aerophone_core::image::name_bytes(name));
         img
     }
 
