@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.4.0 — 2026-11-26
+
+The Live tab now keeps several named setlists, and you can remove entries in bulk.
+
+### Added
+
+- **Setlists:** keep several named playlists on the Live tab. Create, rename and delete them from the ⋯ menu, and switch with the setlist menu. Reserved user scenes are shared between setlists, so no two entries use the same one. Your existing playlist becomes "Setlist 1".
+- **Select mode:** tick entries to remove several at once, or clear a whole setlist (with a confirmation). Removed entries free their reserved user scenes for reuse. The scenes on the AE-30 aren't changed.
+
+### Installing
+
+- **macOS:** open the `.dmg` and drag the app to Applications, replacing the old version. The app isn't notarized yet, so the first time, Control-click it and choose **Open** (or go to System Settings ▸ Privacy & Security ▸ **Open Anyway**).
+- **Windows:** unzip and run `AE30PatchEditor.exe`. If SmartScreen appears, choose **More info ▸ Run anyway**.
+- Your settings and playlist carry over.
+
 ## v0.3.0 — 2026-11-26
 
 This release adds a Live screen for playing on stage, with a playlist of your scenes.

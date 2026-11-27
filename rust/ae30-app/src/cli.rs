@@ -396,12 +396,12 @@ fn playlist_test(port: Option<&str>, args: &[String]) -> Result<(), String> {
     ed.set(crate::editor::Target::Scene, "Perf_rev", rev, want);
     println!("reverb level {before} -> {want}");
     run(&mut ed, "edit copied into the entry", 5, &|ed: &Editor| {
-        ed.playlist.entries[0].changed
+        ed.playlist.entries()[0].changed
     })?;
 
     // Pick the entry: stores it in U12-50 and selects it.
     ed.playlist_play(0);
-    let e = &ed.playlist.entries[0];
+    let e = &ed.playlist.entries()[0];
     println!("entry: slot {:?} stored {}", e.slot, e.stored);
     run(&mut ed, "stored and selected", 30, &idle)?;
     std::thread::sleep(Duration::from_millis(500));

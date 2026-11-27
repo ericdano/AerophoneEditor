@@ -90,6 +90,19 @@ pub struct View {
     pub prefs: bool,
     /// The playlist entry last scrolled into view.
     pub playlist_shown: Option<usize>,
+    /// Setlist select mode, the entries ticked, and the setlist they're in.
+    pub pl_select: bool,
+    pub pl_selected: std::collections::BTreeSet<usize>,
+    pub pl_list: usize,
+    /// Naming a setlist: (which, or None for a new one; the name).
+    pub pl_name: Option<(Option<usize>, String)>,
+    pub pl_confirm: Option<PlConfirm>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum PlConfirm {
+    Clear,
+    Delete(usize),
 }
 
 impl Default for View {
@@ -115,6 +128,11 @@ impl Default for View {
             about: false,
             prefs: false,
             playlist_shown: None,
+            pl_select: false,
+            pl_selected: Default::default(),
+            pl_list: 0,
+            pl_name: None,
+            pl_confirm: None,
         }
     }
 }
@@ -567,25 +585,102 @@ impl App {
 
     fn playlist(&mut self, ui: &mut Ui) {
         let pal = palette(ui);
-        let n = self.ed.playlist.entries.len();
+        let pl = &self.ed.playlist;
+        let n = pl.entries().len();
+        if pl.current != self.view.pl_list {
+            // Another setlist: selections don't carry over.
+            self.view.pl_list = pl.current;
+            self.view.pl_selected.clear();
+        }
         ui.add_space(8.0);
+        // Setlist picker and its menu.
+        let mut pick = None;
         ui.horizontal(|ui| {
-            ui.label(theme::section(ui, "Playlist"));
+            ui.label(theme::section(ui, "Setlist"));
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                ui.label(RichText::new(format!("{n}")).color(pal.weak));
+                ui.menu_button("⋯", |ui| {
+                    if ui.button("New setlist…").clicked() {
+                        self.view.pl_name = Some((None, String::new()));
+                    }
+                    if ui.button("Rename…").clicked() {
+                        let pl = &self.ed.playlist;
+                        self.view.pl_name = Some((Some(pl.current), pl.list_name().to_string()));
+                    }
+                    ui.separator();
+                    if ui.button("Delete setlist…").clicked() {
+                        self.view.pl_confirm = Some(PlConfirm::Delete(self.ed.playlist.current));
+                    }
+                })
+                .response
+                .on_hover_text("New, rename or delete setlists");
+                let pl = &self.ed.playlist;
+                ui.spacing_mut().combo_width = ui.available_width();
+                egui::ComboBox::from_id_salt("setlist")
+                    .selected_text(RichText::new(pl.list_name()).family(theme::semibold()))
+                    .show_ui(ui, |ui| {
+                        for (i, l) in pl.lists.iter().enumerate() {
+                            let label = format!("{}   ({})", l.name, l.entries.len());
+                            if ui.selectable_label(i == pl.current, label).clicked() {
+                                pick = Some(i);
+                            }
+                        }
+                    });
             });
         });
-        ui.add_space(2.0);
-        if ui
-            .add_enabled(
-                self.ed.scene.is_loaded(),
-                egui::Button::new("+  Add current scene")
-                    .min_size(vec2(ui.available_width(), 28.0)),
-            )
-            .on_hover_text("Keep a copy of the scene playing now at the end of the playlist")
-            .clicked()
-        {
-            self.ed.playlist_add();
+        if let Some(i) = pick {
+            self.ed.setlist_select(i);
+        }
+        ui.add_space(4.0);
+        ui.horizontal(|ui| {
+            let sel_w = 64.0;
+            let w = ui.available_width() - sel_w - ui.spacing().item_spacing.x;
+            if ui
+                .add_enabled(
+                    self.ed.scene.is_loaded(),
+                    egui::Button::new("+  Add current scene").min_size(vec2(w, 28.0)),
+                )
+                .on_hover_text("Keep a copy of the scene playing now at the end of this setlist")
+                .clicked()
+            {
+                self.ed.playlist_add();
+            }
+            let r = ui.add_enabled(
+                n > 0,
+                egui::Button::selectable(self.view.pl_select, "Select").min_size(vec2(sel_w, 28.0)),
+            );
+            if r.on_hover_text("Choose entries to remove").clicked() {
+                self.view.pl_select = !self.view.pl_select;
+                self.view.pl_selected.clear();
+            }
+        });
+        if n == 0 {
+            self.view.pl_select = false;
+        }
+        if self.view.pl_select {
+            let k = self.view.pl_selected.len();
+            ui.horizontal_wrapped(|ui| {
+                if ui.small_button("All").clicked() {
+                    self.view.pl_selected = (0..n).collect();
+                }
+                if ui.small_button("None").clicked() {
+                    self.view.pl_selected.clear();
+                }
+                if ui
+                    .add_enabled(k > 0, egui::Button::new(format!("Remove {k}")).small())
+                    .clicked()
+                {
+                    let which: Vec<usize> = self.view.pl_selected.iter().copied().collect();
+                    self.ed.playlist_remove_many(&which);
+                    self.view.pl_selected.clear();
+                    self.view.pl_select = false;
+                }
+                if ui
+                    .add(egui::Button::new(RichText::new("Clear setlist…").color(pal.bad)).small())
+                    .clicked()
+                {
+                    self.view.pl_confirm = Some(PlConfirm::Clear);
+                }
+            });
         }
         ui.add_space(6.0);
         let list_h = (ui.available_height() - 96.0).max(100.0);
@@ -606,19 +701,32 @@ impl App {
                     );
                 }
                 for i in 0..n {
-                    let e = &self.ed.playlist.entries[i];
+                    let e = &self.ed.playlist.entries()[i];
                     let name = e.name();
                     let can_revert = e.changed && e.source.is_some();
                     let pending = e.changed && !e.stored;
                     let place = self.ed.playlist_where(i);
-                    let r = playlist_row(ui, i + 1, &name, &place, active == Some(i), pending);
+                    let ticked = self
+                        .view
+                        .pl_select
+                        .then(|| self.view.pl_selected.contains(&i));
+                    let r =
+                        playlist_row(ui, i + 1, &name, &place, active == Some(i), pending, ticked);
                     if r.clicked() {
-                        act = Some((i, 0));
+                        if self.view.pl_select {
+                            if !self.view.pl_selected.remove(&i) {
+                                self.view.pl_selected.insert(i);
+                            }
+                        } else {
+                            act = Some((i, 0));
+                        }
                     }
                     if active == Some(i) && self.view.playlist_shown != active {
                         r.scroll_to_me(Some(Align::Center));
                     }
-                    r.on_hover_text(if pending {
+                    r.on_hover_text(if self.view.pl_select {
+                        "Click to select"
+                    } else if pending {
                         "Edited: stored in an empty user scene when you pick it"
                     } else {
                         "Pick to play (right-click for more)"
@@ -643,13 +751,16 @@ impl App {
                             act = Some((i, 2));
                         }
                         ui.separator();
-                        if ui.button("Remove from playlist").clicked() {
+                        if ui.button("Remove from setlist").clicked() {
                             act = Some((i, 3));
                         }
                     });
                 }
             });
         self.view.playlist_shown = active;
+        if act.is_some() {
+            self.view.pl_selected.clear();
+        }
         match act {
             Some((i, 0)) => self.ed.playlist_play(i),
             Some((i, d @ (-1 | 1))) => self.ed.playlist_move(i, d),
@@ -679,10 +790,108 @@ impl App {
             }
         });
         ui.label(
-            RichText::new("Edited entries are stored in empty user scenes from U12-50 down when you pick them.")
-                .size(11.0)
-                .color(pal.weak),
+            RichText::new(
+                "Edited entries are stored in empty user scenes from U12-50 down when you pick them.",
+            )
+            .size(11.0)
+            .color(pal.weak),
         );
+    }
+
+    /// The setlist name and confirmation dialogs.
+    fn setlist_dialogs(&mut self, ctx: &egui::Context) {
+        if let Some((which, mut name)) = self.view.pl_name.take() {
+            let mut done = None;
+            let title = if which.is_some() {
+                "Rename setlist"
+            } else {
+                "New setlist"
+            };
+            let modal = egui::Modal::new(egui::Id::unique("setlist_name")).show(ctx, |ui| {
+                ui.set_width(300.0);
+                ui.label(theme::title(title, 16.0));
+                ui.add_space(6.0);
+                let r = ui.add(
+                    egui::TextEdit::singleline(&mut name)
+                        .hint_text("e.g. Friday at Blue Note")
+                        .desired_width(f32::INFINITY),
+                );
+                r.request_focus();
+                let enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                ui.add_space(8.0);
+                ui.horizontal(|ui| {
+                    if ui.button("Cancel").clicked() {
+                        done = Some(false);
+                    }
+                    let ok = if which.is_some() { "Rename" } else { "Create" };
+                    if ui.add(theme::primary(ui, ok)).clicked() || enter {
+                        done = Some(true);
+                    }
+                });
+            });
+            if modal.should_close() && done.is_none() {
+                done = Some(false);
+            }
+            match (done, which) {
+                (Some(true), Some(l)) => self.ed.setlist_rename(l, &name),
+                (Some(true), None) => self.ed.setlist_new(&name),
+                (Some(false), _) => {}
+                (None, _) => self.view.pl_name = Some((which, name)),
+            }
+        }
+        if let Some(c) = self.view.pl_confirm {
+            let pl = &self.ed.playlist;
+            let (title, text, ok) = match c {
+                PlConfirm::Clear => (
+                    "Clear setlist?",
+                    format!(
+                        "Remove all {} entries from \"{}\"? The scenes on the AE-30 aren't changed.",
+                        pl.entries().len(),
+                        pl.list_name()
+                    ),
+                    "Clear",
+                ),
+                PlConfirm::Delete(l) => (
+                    "Delete setlist?",
+                    format!(
+                        "Delete \"{}\" and its {} entries? The scenes on the AE-30 aren't changed.",
+                        pl.lists.get(l).map_or("", |x| x.name.as_str()),
+                        pl.lists.get(l).map_or(0, |x| x.entries.len())
+                    ),
+                    "Delete",
+                ),
+            };
+            let mut done = None;
+            let modal = egui::Modal::new(egui::Id::unique("setlist_confirm")).show(ctx, |ui| {
+                ui.set_width(320.0);
+                ui.label(theme::title(title, 16.0));
+                ui.add_space(6.0);
+                ui.label(text);
+                ui.add_space(8.0);
+                ui.horizontal(|ui| {
+                    if ui.button("Cancel").clicked() {
+                        done = Some(false);
+                    }
+                    if ui.add(theme::primary(ui, ok)).clicked() {
+                        done = Some(true);
+                    }
+                });
+            });
+            if modal.should_close() && done.is_none() {
+                done = Some(false);
+            }
+            if let Some(yes) = done {
+                self.view.pl_confirm = None;
+                if yes {
+                    match c {
+                        PlConfirm::Clear => self.ed.playlist_clear(),
+                        PlConfirm::Delete(l) => self.ed.setlist_delete(l),
+                    }
+                    self.view.pl_selected.clear();
+                    self.view.pl_select = false;
+                }
+            }
+        }
     }
 
     // ---- status bar ---------------------------------------------------------
@@ -1572,6 +1781,12 @@ impl App {
             match std::env::var("AE30_DIALOG").as_deref() {
                 Ok("prefs") => self.view.prefs = true,
                 Ok("about") => self.view.about = true,
+                Ok("select") => {
+                    self.view.pl_select = true;
+                    self.view.pl_list = self.ed.playlist.current;
+                    self.view.pl_selected.insert(0);
+                }
+                Ok("setlist") => self.view.pl_name = Some((None, String::new())),
                 _ => {}
             }
             if let Ok(t) = std::env::var("AE30_PICKER") {
@@ -1664,6 +1879,7 @@ fn playlist_row(
     place: &str,
     selected: bool,
     pending: bool,
+    ticked: Option<bool>,
 ) -> egui::Response {
     let pal = palette(ui);
     let (rect, r) = ui.allocate_exact_size(vec2(ui.available_width(), 32.0), Sense::click());
@@ -1676,13 +1892,37 @@ fn playlist_row(
     };
     let p = ui.painter();
     p.rect_filled(rect, 6.0, bg);
-    p.text(
-        rect.left_center() + vec2(10.0, 0.0),
-        egui::Align2::LEFT_CENTER,
-        num.to_string(),
-        egui::FontId::proportional(12.0),
-        if selected { pal.accent } else { pal.weak },
-    );
+    // In select mode, a tick box replaces the number.
+    if let Some(on) = ticked {
+        let b =
+            egui::Rect::from_center_size(rect.left_center() + vec2(16.0, 0.0), vec2(15.0, 15.0));
+        if on {
+            p.rect_filled(b, 3.0, pal.accent);
+            p.line(
+                vec![
+                    b.left_center() + vec2(3.0, 0.0),
+                    b.center_bottom() + vec2(-1.0, -4.0),
+                    b.right_top() + vec2(-3.0, 4.0),
+                ],
+                egui::Stroke::new(2.0, pal.on_accent),
+            );
+        } else {
+            p.rect_stroke(
+                b,
+                3.0,
+                egui::Stroke::new(1.5, pal.weak),
+                egui::StrokeKind::Inside,
+            );
+        }
+    } else {
+        p.text(
+            rect.left_center() + vec2(10.0, 0.0),
+            egui::Align2::LEFT_CENTER,
+            num.to_string(),
+            egui::FontId::proportional(12.0),
+            if selected { pal.accent } else { pal.weak },
+        );
+    }
     p.text(
         rect.right_center() - vec2(8.0, 0.0),
         egui::Align2::RIGHT_CENTER,
@@ -1818,6 +2058,7 @@ impl eframe::App for App {
         self.backup_dialog(&ctx);
         self.restore_dialog(&ctx);
         self.save_tone_dialog(&ctx);
+        self.setlist_dialogs(&ctx);
         self.about_dialog(&ctx);
         self.preferences_window(&ctx);
         self.screenshot(&ctx);

@@ -728,10 +728,10 @@ pub fn live(ui: &mut Ui, ed: &mut Editor) {
         .current_scene()
         .map(|r| r.to_string())
         .unwrap_or_default();
-    let n = ed.playlist.entries.len();
+    let n = ed.playlist.entries().len();
     let list = match ed.playlist.active {
-        Some(i) => format!("Playlist {} of {n}", i + 1),
-        None => "Not in the playlist".into(),
+        Some(i) => format!("{}: {} of {n}", ed.playlist.list_name(), i + 1),
+        None => format!("Not in {}", ed.playlist.list_name()),
     };
     ui.label(RichText::new(format!("{place}   ·   {list}")).color(pal.weak));
     ui.horizontal(|ui| {

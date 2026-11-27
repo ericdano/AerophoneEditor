@@ -26,7 +26,7 @@ Copyright © 2027 Eric Dannewitz. If you find it useful, you can [buy me a coffe
 
   <img src="docs/images/tone.png" width="70%">
 
-- **Live:** a performance screen with the scene's name, big knobs for reverb, chorus, delay and Color (the insert effect) with a type menu under each, and sliders for level and dark/bright. A playlist on the right holds your scenes for a gig; click an entry, or use the arrow keys or Page Up/Down (most page-turner pedals send these), to switch. Each entry keeps its own copy of the scene, including tweaks you make while it plays. Nothing is stored until you pick an edited entry again: it is then saved in an empty user scene, counting down from U12-50 (only slots named INIT SCENE are used), so later picks are instant.
+- **Live:** a performance screen with the scene's name, big knobs for reverb, chorus, delay and Color (the insert effect) with a type menu under each, and sliders for level and dark/bright. On the right, named setlists hold your scenes for each gig (create, rename, switch and delete them from the setlist menu; Select lets you tick entries to remove, or clear a whole setlist); click an entry, or use the arrow keys or Page Up/Down (most page-turner pedals send these), to switch. Each entry keeps its own copy of the scene, including tweaks you make while it plays. Nothing is stored until you pick an edited entry again: it is then saved in an empty user scene, counting down from U12-50 (only slots named INIT SCENE are used), so later picks are instant.
 
   <img src="docs/images/live.png" width="70%">
 
