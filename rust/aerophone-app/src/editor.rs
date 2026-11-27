@@ -382,6 +382,22 @@ impl Editor {
         matches!(self.conn, Conn::Online(_))
     }
 
+    /// Drop the link when its MIDI ports are gone (USB unplugged, Bluetooth
+    /// disconnected). Nothing else notices while the unit is idle. The
+    /// Failed state makes the app look for the AE-30 again.
+    pub fn check_ports(&mut self) {
+        let Some(link) = &self.link else { return };
+        let Ok((ins, outs)) = midi::list_ports() else {
+            return;
+        };
+        if ins.contains(&link.in_label) && outs.contains(&link.out_label) {
+            return;
+        }
+        let e = format!("no MIDI port \"{}\" any more (disconnected)", link.in_label);
+        self.disconnect();
+        self.conn = Conn::Failed(e);
+    }
+
     pub fn port_name(&self) -> Option<&str> {
         self.link.as_ref().map(|l| l.in_label.as_str())
     }

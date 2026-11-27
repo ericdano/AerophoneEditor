@@ -624,7 +624,7 @@ fn set_live_type(ed: &mut Editor, block: &str, type_off: u32, sw_off: u32, ty: i
     }
 }
 
-fn live_fx(ui: &mut Ui, ed: &mut Editor, fx: (&str, &str, &str, u32, u32), card_w: f32) {
+fn live_fx(ui: &mut Ui, ed: &mut Editor, fx: (&str, &str, &str, u32, u32), card_w: f32, dial: f32) {
     let (_, block, kind, type_off, sw_off) = fx;
     let pal = palette(ui);
     let t = Target::Scene;
@@ -647,12 +647,12 @@ fn live_fx(ui: &mut Ui, ed: &mut Editor, fx: (&str, &str, &str, u32, u32), card_
             let v = ed.value(t, block, p).filter(|_| ty != 0);
             let show = |x: i32| p.show(x);
             let reset = widgets::default_of(p);
-            if let Some(n) = widgets::dial(ui, 96.0, v, (p.min, p.max), reset, &show, &label) {
+            if let Some(n) = widgets::dial(ui, dial, v, (p.min, p.max), reset, &show, &label) {
                 ed.set(t, block, p, n);
             }
         }
         None => {
-            widgets::dial(ui, 96.0, None, (0, 127), None, &|x| x.to_string(), &label);
+            widgets::dial(ui, dial, None, (0, 127), None, &|x| x.to_string(), &label);
         }
     }
     ui.add_space(8.0);
@@ -675,6 +675,29 @@ fn live_fx(ui: &mut Ui, ed: &mut Editor, fx: (&str, &str, &str, u32, u32), card_
             .size(11.0)
             .color(pal.amber),
     );
+}
+
+/// Live tab layout for `width` × `height` points of visible space below the
+/// header: (columns, card width, knob size). 2×2 when that fills a tall
+/// screen with knobs nearly as big as four in a row would get, else a row.
+fn live_grid(width: f32, height: f32, gap: f32) -> (usize, f32, f32) {
+    const OUTPUT_H: f32 = 150.0; // the Output card below, with its gap
+    const CARD_H: f32 = 140.0; // a card's height besides the knob
+    const MIN_DIAL: f32 = 96.0;
+    const MAX_DIAL: f32 = 320.0;
+    let fit = |cols: usize| {
+        let (c, rows) = (cols as f32, (4 / cols) as f32);
+        let w = (width - (c - 1.0) * gap) / c;
+        let h = (height - OUTPUT_H) / rows - gap - CARD_H;
+        let dial = (w - 70.0).min(h).clamp(MIN_DIAL, MAX_DIAL);
+        (cols, w.min(dial * 2.0 + 110.0).max(150.0), dial)
+    };
+    let (row, square) = (fit(4), fit(2));
+    if square.2 >= row.2 * 0.8 {
+        square
+    } else {
+        row
+    }
 }
 
 /// A wide horizontal slider with words at both ends; returns a new value.
@@ -743,18 +766,26 @@ pub fn live(ui: &mut Ui, ed: &mut Editor) {
     let tones: Vec<String> = parts_on(ed).into_iter().map(|p| ed.tone_label(p)).collect();
     ui.label(RichText::new(tones.join("  ·  ")).color(pal.weak));
     ui.add_space(14.0);
-    // Four cards side by side, sharing the width.
+    // The four effect cards: one row of four, or 2×2 when that gives bigger
+    // knobs (tall screens), with the knobs grown to fill the visible space.
     let gap = 12.0;
-    let card_w = ((ui.available_width() - 3.0 * gap) / 4.0).clamp(150.0, 230.0);
-    flow(ui, |ui| {
-        for fx in LIVE_FX {
-            card(ui, fx.0, card_w, |ui| {
-                ui.vertical_centered(|ui| live_fx(ui, ed, fx, card_w));
-            });
-        }
-    });
-    ui.add_space(gap);
-    let w = (card_w * 4.0 + 3.0 * gap).min(ui.available_width());
+    let (cols, card_w, dial) = live_grid(
+        ui.available_width(),
+        ui.clip_rect().bottom() - ui.cursor().top(),
+        gap,
+    );
+    for row in LIVE_FX.chunks(cols) {
+        ui.horizontal_top(|ui| {
+            ui.spacing_mut().item_spacing.x = gap;
+            for &fx in row {
+                card(ui, fx.0, card_w, |ui| {
+                    ui.vertical_centered(|ui| live_fx(ui, ed, fx, card_w, dial));
+                });
+            }
+        });
+        ui.add_space(gap);
+    }
+    let w = (card_w * cols as f32 + (cols - 1) as f32 * gap).min(ui.available_width());
     card(ui, "Output", w, |ui| {
         ui.spacing_mut().item_spacing.y = 10.0;
         // Level: the scene's volume.
@@ -1306,4 +1337,23 @@ pub fn system(ui: &mut Ui, ed: &mut Editor) {
         );
         leftovers(ui, ed, t, "Sys_common", "More", &used);
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::live_grid;
+
+    #[test]
+    fn live_grid_fills_the_space() {
+        // Wide desktop window: one row, knobs bigger than the old 96.
+        let (cols, w, dial) = live_grid(1050.0, 620.0, 12.0);
+        assert_eq!(cols, 4);
+        assert!(dial > 150.0 && w * 4.0 + 36.0 <= 1050.0);
+        // Tall window: 2×2 with big knobs.
+        let (cols, w, dial) = live_grid(1000.0, 760.0, 12.0);
+        assert_eq!(cols, 2);
+        assert!(dial > 140.0 && w * 2.0 + 12.0 <= 1000.0);
+        // Small window: never below the old size.
+        assert_eq!(live_grid(500.0, 300.0, 12.0).2, 96.0);
+    }
 }

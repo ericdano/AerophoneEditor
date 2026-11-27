@@ -64,14 +64,15 @@ pub fn list_ports() -> Result<(Vec<String>, Vec<String>), String> {
 
 /// The best label for `hints` (case-insensitive): the first hint that
 /// matches anything wins; among its matches, the shortest name (so "AE-30"
-/// beats "AE-30 DAW CTRL", which is the unit's DAW-control port).
+/// beats "AE-30 DAW CTRL", which is the unit's DAW-control port), then the
+/// first alphabetically ("AE-30 MIDI OUT1" before OUT2, as the Generic USB driver names them on some systems).
 fn pick<'a>(labels: &'a [String], hints: &[&str]) -> Option<&'a String> {
     hints.iter().find_map(|h| {
         let h = h.to_lowercase();
         labels
             .iter()
             .filter(|l| l.to_lowercase().contains(&h))
-            .min_by_key(|l| (l.to_lowercase().contains("daw"), l.len()))
+            .min_by_key(|l| (l.to_lowercase().contains("daw"), l.len(), l.as_str()))
     })
 }
 
@@ -216,5 +217,7 @@ mod tests {
         assert_eq!(pick(&labels, &["EWI"]), None);
         let ae = ["AE-30 AE-30 DAW CTRL", "AE-30"].map(String::from);
         assert_eq!(pick(&ae, &["AE-30"]), Some(&ae[1]));
+        let generic = ["Network Session 1", "AE-30 MIDI OUT2", "AE-30 MIDI OUT1"].map(String::from);
+        assert_eq!(pick(&generic, &["AE-30"]), Some(&generic[2]));
     }
 }

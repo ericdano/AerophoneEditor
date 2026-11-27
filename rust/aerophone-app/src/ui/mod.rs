@@ -36,6 +36,27 @@ pub enum Tab {
     Live,
 }
 
+impl Tab {
+    const KEYS: [(Tab, &'static str); 7] = [
+        (Tab::Scene, "scene"),
+        (Tab::Part, "part"),
+        (Tab::Effects, "effects"),
+        (Tab::Controllers, "controllers"),
+        (Tab::Tone, "tone"),
+        (Tab::System, "system"),
+        (Tab::Live, "live"),
+    ];
+
+    /// Name in prefs.txt and `AE30_TAB`.
+    pub fn key(self) -> &'static str {
+        Self::KEYS.iter().find(|(t, _)| *t == self).unwrap().1
+    }
+
+    pub fn from_key(k: &str) -> Option<Tab> {
+        Self::KEYS.iter().find(|(_, n)| *n == k).map(|(t, _)| *t)
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum FxSel {
     Mfx(u8),
@@ -108,7 +129,7 @@ pub enum PlConfirm {
 impl Default for View {
     fn default() -> Self {
         View {
-            tab: Tab::Scene,
+            tab: Tab::Live,
             part: 1,
             tone_part: 1,
             partial: 1,
@@ -160,13 +181,17 @@ impl Default for App {
 
 impl App {
     pub fn new() -> Self {
+        let prefs = prefs::Prefs::load();
         App {
             ed: Editor::new(),
-            view: View::default(),
+            view: View {
+                tab: prefs.tab,
+                ..View::default()
+            },
             started: false,
             last_scan: None,
             icon: None,
-            prefs: prefs::Prefs::load(),
+            prefs,
             #[cfg(target_os = "macos")]
             native_menu: None,
             shot: std::env::var("AE30_SCREENSHOT")
@@ -189,10 +214,12 @@ impl App {
         self.native_menu = Some(native_menu::NativeMenu::install(ctx));
     }
 
-    /// While offline (not after the user chose Disconnect), look for the
-    /// AE-30's port every two seconds and connect when it appears.
+    /// Every two seconds: while connected, check that the AE-30's ports are
+    /// still there; while offline (not after the user chose Disconnect),
+    /// look for them and connect when they appear.
     fn auto_connect(&mut self, ctx: &egui::Context) {
-        if !matches!(self.ed.conn, Conn::Failed(_)) {
+        let linked = self.ed.port_name().is_some();
+        if !linked && !matches!(self.ed.conn, Conn::Failed(_)) {
             return;
         }
         ctx.request_repaint_after(Duration::from_secs(2));
@@ -203,6 +230,10 @@ impl App {
             return;
         }
         self.last_scan = Some(std::time::Instant::now());
+        if linked {
+            self.ed.check_ports();
+            return;
+        }
         let hints: Vec<String> = match &self.view.port {
             Some(p) => vec![p.to_lowercase()],
             None => crate::midi::DEFAULT_PORT_HINTS
@@ -1057,11 +1088,10 @@ impl App {
                         self.connect(ui.ctx());
                     }
                     ui.add_space(12.0);
+                    let help = "Connect the AE-30 by USB. If it doesn't show up, set its USB Driver to \
+                                Generic (Menu ▸ System ▸ USB). Close Roland's phone app first.";
                     ui.label(
-                        RichText::new(
-                            "Connect the AE-30 by USB. If it doesn't show up, set its USB Driver to \
-                             Generic (Menu ▸ System ▸ USB). Close Roland's phone app first.",
-                        )
+                        RichText::new(help)
                         .size(12.0)
                         .color(pal.weak),
                     );
@@ -1768,15 +1798,7 @@ impl App {
         };
         if !*requested {
             if let Ok(tab) = std::env::var("AE30_TAB") {
-                self.view.tab = match tab.as_str() {
-                    "part" => Tab::Part,
-                    "effects" => Tab::Effects,
-                    "controllers" => Tab::Controllers,
-                    "tone" => Tab::Tone,
-                    "system" => Tab::System,
-                    "live" => Tab::Live,
-                    _ => Tab::Scene,
-                };
+                self.view.tab = Tab::from_key(&tab).unwrap_or(Tab::Scene);
             }
             match std::env::var("AE30_DIALOG").as_deref() {
                 Ok("prefs") => self.view.prefs = true,
@@ -1981,6 +2003,11 @@ impl eframe::App for App {
             ctx.request_repaint_after(wait.max(Duration::from_millis(1)));
         }
         self.auto_connect(&ctx);
+        // Open on the last tab next time (screenshot runs pick their own).
+        if self.view.tab != self.prefs.tab && self.shot.is_none() {
+            self.prefs.tab = self.view.tab;
+            self.prefs.save();
+        }
         if self.ed.is_loading()
             || self.ed.breath.1.elapsed() < Duration::from_secs(3)
             || self.ed.bend.1.elapsed() < Duration::from_secs(3)

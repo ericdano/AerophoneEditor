@@ -6,6 +6,7 @@ use eframe::egui::Color32;
 
 use super::commands::ThemeChoice;
 use super::theme::{Look, MAX_CORNERS, SCALES};
+use super::Tab;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum KnobSpeed {
@@ -46,6 +47,8 @@ pub struct Prefs {
     pub knob_speed: KnobSpeed,
     /// Leave INIT SCENE slots out of the scene list.
     pub hide_empty: bool,
+    /// The tab that was open last; the app opens on it.
+    pub tab: Tab,
 }
 
 impl Default for Prefs {
@@ -55,6 +58,7 @@ impl Default for Prefs {
             look: Look::default(),
             knob_speed: KnobSpeed::Normal,
             hide_empty: false,
+            tab: Tab::Live,
         }
     }
 }
@@ -102,6 +106,11 @@ impl Prefs {
                     }
                 }
                 "hide_empty" => p.hide_empty = v == "1",
+                "tab" => {
+                    if let Some(t) = Tab::from_key(v) {
+                        p.tab = t;
+                    }
+                }
                 _ => {}
             }
         }
@@ -121,6 +130,7 @@ impl Prefs {
             self.knob_speed.key(),
             u8::from(self.hide_empty),
         );
+        t += &format!("tab={}\n", self.tab.key());
         t
     }
 
@@ -155,6 +165,7 @@ mod tests {
             },
             knob_speed: KnobSpeed::Slow,
             hide_empty: true,
+            tab: Tab::Effects,
         };
         assert_eq!(Prefs::parse(&p.to_text()), p);
         assert_eq!(
