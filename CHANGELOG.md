@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## v0.5.0 — 2026-11-26
+
+The editor is now called Aerophone Editor, the Mac version is signed and notarized by Apple, and a demo mode lets you try it without an AE-30.
 
 ### Added
 
@@ -13,6 +15,12 @@
 - **Bigger knobs on the Live tab:** the four effect cards grow with the window and switch to a 2×2 grid on tall screens.
 - **Notices a disconnected AE-30:** when the USB cable is pulled or Bluetooth drops, the app now shows the connection screen and reconnects by itself when the AE-30 is back. Before, it kept showing the old connection.
 - **New name: Aerophone Editor.** The app, its files (`AerophoneEditor.exe`, `AerophoneEditor-<version>.dmg`), the command-line tool (`aerophoneeditor`) and the GitHub repository (`ericdano/AerophoneEditor`; the old address redirects) are renamed. The app ID is now `com.ericdannewitz.aerophoneeditor`. Your settings, setlists and preset name cache move to the new settings folder automatically on first launch.
+
+### Installing
+
+- **macOS:** open the `.dmg` and drag **Aerophone Editor** to Applications. The app is signed and notarized by Apple, so it opens without warnings. You can delete the old "AE-30 Patch Editor" app.
+- **Windows:** unzip and run `AerophoneEditor.exe`. If SmartScreen appears, choose **More info ▸ Run anyway**.
+- Your settings, setlists and preset name cache move over automatically on first launch.
 
 ## v0.4.0 — 2026-11-26
 
