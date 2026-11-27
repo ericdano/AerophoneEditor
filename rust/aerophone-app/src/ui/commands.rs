@@ -57,6 +57,8 @@ pub enum Command {
     Reload,
     Reconnect,
     Disconnect,
+    /// Connect to a simulated AE-30 (nothing is sent over MIDI).
+    Demo,
     Tab(Tab),
     Theme(ThemeChoice),
     Preferences,
@@ -167,6 +169,7 @@ impl App {
             Command::Reload if self.ed.is_online() => self.ed.load_scene(),
             Command::Reconnect => self.connect(ctx),
             Command::Disconnect => self.ed.disconnect(),
+            Command::Demo => self.connect_demo(ctx),
             Command::Tab(t) => self.view.tab = t,
             Command::Theme(t) => {
                 self.prefs.theme = t;
@@ -251,6 +254,9 @@ impl App {
         }
         if item(ui, s.online, "Disconnect", None) {
             run = Some(Command::Disconnect);
+        }
+        if item(ui, true, "Demo Mode", None) {
+            run = Some(Command::Demo);
         }
         ui.separator();
         if item(ui, true, "Roland AE-30 Manuals", None) {

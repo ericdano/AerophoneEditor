@@ -305,6 +305,9 @@ pub struct Editor {
     pub last_rx: Option<Instant>,
     /// The Live screen's playlist.
     pub playlist: Playlist,
+    /// While in demo mode: the real setlists and cached preset names.
+    saved_playlist: Option<Playlist>,
+    saved_presets: Option<Vec<SceneName>>,
     pending: HashMap<u64, usize>,
     scene_reload: Option<Instant>,
     tone_reload: [Option<Instant>; 4],
@@ -343,6 +346,8 @@ impl Editor {
             bend: (0, now),
             last_rx: None,
             playlist: Playlist::load(),
+            saved_playlist: None,
+            saved_presets: None,
             pending: HashMap::new(),
             scene_reload: None,
             tone_reload: [None; 4],
@@ -369,7 +374,34 @@ impl Editor {
         }
     }
 
+    /// Demo mode: connect to a simulated AE-30. Everything works on its
+    /// memory and nothing is sent over MIDI. Setlists live in memory only.
+    pub fn connect_demo(&mut self, waker: Option<Waker>) {
+        self.disconnect();
+        self.link = Some(Link::demo());
+        self.saved_playlist = Some(std::mem::take(&mut self.playlist));
+        self.saved_presets = Some(std::mem::take(&mut self.preset_names));
+        self.conn = Conn::Connecting;
+        self.session.identify();
+        if let Some(w) = waker {
+            w();
+        }
+    }
+
+    pub fn is_demo(&self) -> bool {
+        self.link.as_ref().is_some_and(Link::is_demo)
+    }
+
     pub fn disconnect(&mut self) {
+        if let Some(p) = self.saved_playlist.take() {
+            self.playlist = p;
+        }
+        if let Some(p) = self.saved_presets.take() {
+            // Leaving demo mode: forget the simulated unit's names.
+            self.preset_names = p;
+            self.user_names.iter_mut().for_each(String::clear);
+            self.user_tones = None;
+        }
         self.link = None;
         self.session = Session::default();
         self.pending.clear();
@@ -386,7 +418,9 @@ impl Editor {
     /// disconnected). Nothing else notices while the unit is idle. The
     /// Failed state makes the app look for the AE-30 again.
     pub fn check_ports(&mut self) {
-        let Some(link) = &self.link else { return };
+        let Some(link) = self.link.as_ref().filter(|l| !l.is_demo()) else {
+            return;
+        };
         let Ok((ins, outs)) = midi::list_ports() else {
             return;
         };
@@ -543,7 +577,7 @@ impl Editor {
                         self.preset_names.clear();
                     }
                     self.preset_names.extend(scenes);
-                    if bank == 11 {
+                    if bank == 11 && !self.is_demo() {
                         save_preset_cache(&self.preset_names);
                     }
                 }

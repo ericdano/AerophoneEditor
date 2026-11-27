@@ -9,6 +9,7 @@ pub mod params;
 pub mod read;
 pub mod scene;
 pub mod session;
+pub mod sim;
 pub mod sysex;
 pub mod syx;
 

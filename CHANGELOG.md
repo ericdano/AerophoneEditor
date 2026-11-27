@@ -4,6 +4,7 @@
 
 ### Added
 
+- **Demo mode:** try every screen without an AE-30. Click **Try Demo** on the connection screen (or choose Demo Mode from the menu) to work with a simulated AE-30 that has a few demo scenes. Nothing is sent over MIDI, and your setlists aren't touched.
 - **Opens where you left off:** the app starts on the tab you used last (Live the first time).
 
 ### Changed

@@ -5,18 +5,22 @@
 //! " #2", " #3", … added when several ports share a name.
 
 use std::collections::HashMap;
-use std::sync::mpsc::{self, Receiver};
+use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::{Duration, Instant};
 
 pub type Waker = Box<dyn Fn() + Send + Sync>;
 
 use aerophone_core::session::{Event, Session};
+use aerophone_core::sim::Sim;
 use midir::{
     Ignore, MidiInput, MidiInputConnection, MidiInputPort, MidiOutput, MidiOutputConnection,
     MidiOutputPort,
 };
 
 const CLIENT: &str = "AerophoneEditor";
+
+/// The port label of the simulated AE-30 (demo mode).
+pub const DEMO_PORT: &str = "Demo AE-30";
 
 /// Names the AE-30 shows up under, depending on OS and driver.
 pub const DEFAULT_PORT_HINTS: [&str; 3] = ["AE-30", "Aerophone", "AE-20"];
@@ -80,8 +84,11 @@ fn pick<'a>(labels: &'a [String], hints: &[&str]) -> Option<&'a String> {
 /// queued; [`Link::pump`] moves it into a [`Session`] and sends whatever the
 /// session has due.
 pub struct Link {
-    _input: MidiInputConnection<()>,
-    output: MidiOutputConnection,
+    _input: Option<MidiInputConnection<()>>,
+    output: Option<MidiOutputConnection>,
+    /// Demo mode: the simulated AE-30 instead of ports; its replies go
+    /// into the same queue as received MIDI.
+    sim: Option<(Box<Sim>, Sender<Vec<u8>>)>,
     rx: Receiver<Vec<u8>>,
     pub in_label: String,
     pub out_label: String,
@@ -131,16 +138,43 @@ impl Link {
             .map_err(|e| format!("MIDI Out \"{out_label}\": {e}"))?;
 
         Ok(Link {
-            _input: input,
-            output,
+            _input: Some(input),
+            output: Some(output),
+            sim: None,
             rx,
             in_label,
             out_label,
         })
     }
 
+    /// A link to a simulated AE-30: nothing is sent over MIDI.
+    pub fn demo() -> Self {
+        let (tx, rx) = mpsc::channel();
+        Link {
+            _input: None,
+            output: None,
+            sim: Some((Box::new(Sim::new()), tx)),
+            rx,
+            in_label: DEMO_PORT.into(),
+            out_label: DEMO_PORT.into(),
+        }
+    }
+
+    pub fn is_demo(&self) -> bool {
+        self.sim.is_some()
+    }
+
     pub fn send(&mut self, bytes: &[u8]) -> Result<(), String> {
-        self.output.send(bytes).map_err(|e| e.to_string())
+        if let Some((sim, tx)) = &mut self.sim {
+            for reply in sim.handle(bytes) {
+                let _ = tx.send(reply);
+            }
+            return Ok(());
+        }
+        match &mut self.output {
+            Some(o) => o.send(bytes).map_err(|e| e.to_string()),
+            None => Ok(()),
+        }
     }
 
     /// Feed received SysEx into `session` and send what is due. Returns

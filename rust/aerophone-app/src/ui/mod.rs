@@ -200,6 +200,12 @@ impl App {
         }
     }
 
+    fn connect_demo(&mut self, ctx: &egui::Context) {
+        let c = ctx.clone();
+        self.ed
+            .connect_demo(Some(Box::new(move || c.request_repaint())));
+    }
+
     fn connect(&mut self, ctx: &egui::Context) {
         let c = ctx.clone();
         self.ed.connect(
@@ -931,6 +937,10 @@ impl App {
         let pal = palette(ui);
         ui.horizontal(|ui| {
             let (color, text) = match &self.ed.conn {
+                Conn::Online(_) if self.ed.is_demo() => (
+                    pal.amber,
+                    "Demo mode · simulated AE-30, nothing is sent over MIDI".to_string(),
+                ),
                 Conn::Online(id) => (
                     pal.good,
                     format!("{:?} · {}", id.model, self.ed.port_name().unwrap_or(""))
@@ -1086,6 +1096,14 @@ impl App {
                     ui.add_space(8.0);
                     if ui.add(theme::primary(ui, "Connect")).clicked() {
                         self.connect(ui.ctx());
+                    }
+                    ui.add_space(6.0);
+                    if ui
+                        .button("Try Demo")
+                        .on_hover_text("Explore every screen with a simulated AE-30. Nothing is sent over MIDI.")
+                        .clicked()
+                    {
+                        self.connect_demo(ui.ctx());
                     }
                     ui.add_space(12.0);
                     let help = "Connect the AE-30 by USB. If it doesn't show up, set its USB Driver to \
@@ -1997,7 +2015,12 @@ impl eframe::App for App {
             theme::install(&ctx, self.prefs.look);
             self.prefs.theme.apply(&ctx);
             self.apply_knob_speed();
-            self.connect(&ctx);
+            // Developer aid: `AE30_DEMO=1` starts in demo mode.
+            if std::env::var_os("AE30_DEMO").is_some() {
+                self.connect_demo(&ctx);
+            } else {
+                self.connect(&ctx);
+            }
         }
         if let Some(wait) = self.ed.tick() {
             ctx.request_repaint_after(wait.max(Duration::from_millis(1)));
