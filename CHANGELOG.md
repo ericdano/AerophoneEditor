@@ -1,10 +1,18 @@
 # Changelog
 
-## Unreleased
+## v0.6.0 — 2026-11-26
+
+On the Live tab you can now hide the side panels and give the knobs the whole window.
 
 ### Added
 
 - **Fold away the side panels on the Live tab:** the « and » buttons hide the scene list and the setlist, so the effect knobs get the whole window. A thin strip at the edge opens them again, and the app remembers your choice. Page-turner pedals keep stepping through the setlist while it's hidden.
+
+### Installing
+
+- **macOS:** open the `.dmg` and drag **Aerophone Editor** to Applications, replacing the old version. The app is signed and notarized by Apple.
+- **Windows:** unzip and run `AerophoneEditor.exe`. If SmartScreen appears, choose **More info ▸ Run anyway**.
+- Your settings and setlists carry over.
 
 ## v0.5.0 — 2026-11-26
 
