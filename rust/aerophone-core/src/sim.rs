@@ -534,6 +534,36 @@ fn scene(
             if delay { 30 } else { 0 },
         );
     }
+    // Parts not used keep a real tone, switched off (as on the unit).
+    if let Some(&(msb, lsb, pc)) = tones.first() {
+        for k in tones.len().min(4)..5 {
+            let part = format!("Perf_part_{}", k + 1);
+            set(
+                &mut img,
+                &part,
+                "Tone Bank Select MSB (CC#0)",
+                i32::from(msb),
+            );
+            set(
+                &mut img,
+                &part,
+                "Tone Bank Select LSB (CC#32)",
+                i32::from(lsb),
+            );
+            set(&mut img, &part, "Tone Program Change (PC)", i32::from(pc));
+        }
+    }
+    // Breath sends what the factory scenes use: expression, breath,
+    // CC 3 and CC 9, expression on a log curve.
+    for (k, (cc, curve)) in [(11, 6), (2, 0), (3, 0), (9, 0)].into_iter().enumerate() {
+        let n = k + 1;
+        let b = "Perf_as_breath_1";
+        set(&mut img, b, &format!("Assign {n} Function"), cc);
+        set(&mut img, b, &format!("Assign {n} Input Max"), 127);
+        set(&mut img, b, &format!("Assign {n} Output Max"), 127);
+        set(&mut img, b, &format!("Assign {n} Mode"), 1);
+        set(&mut img, b, &format!("Assign {n} Curve"), curve);
+    }
     if reverb > 0 {
         set(&mut img, "Perf_rev", "Switch", 1);
         set(&mut img, "Perf_rev", "Reverb Type", 1);

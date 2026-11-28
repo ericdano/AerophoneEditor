@@ -879,7 +879,8 @@ pub fn controllers(ui: &mut Ui, view: &mut View, ed: &mut Editor) {
                         continue;
                     }
                     let used = slots_in_use(ed, &assign_block(key, view.ctl_midi));
-                    let text = if used > 0 {
+                    // Grey when unused, but never on the selection highlight.
+                    let text = if used > 0 || view.ctl == i {
                         RichText::new(*name)
                     } else {
                         RichText::new(*name).color(pal.weak)
