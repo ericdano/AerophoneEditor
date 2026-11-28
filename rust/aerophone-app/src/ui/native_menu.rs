@@ -65,7 +65,7 @@ impl NativeMenu {
 
         let prev = item("Previous Scene", Command::PrevScene, key(Code::BracketLeft));
         let next = item("Next Scene", Command::NextScene, key(Code::BracketRight));
-        let reload = item("Reload from AE-30", Command::Reload, key(Code::KeyR));
+        let reload = item("Reload from Aerophone", Command::Reload, key(Code::KeyR));
         let connect = item("Connect", Command::Reconnect, None);
         let disconnect = item("Disconnect", Command::Disconnect, None);
         let demo = item("Demo Mode", Command::Demo, None);
@@ -135,7 +135,7 @@ impl NativeMenu {
         ]);
         let scene_menu = Submenu::new("Scene", true);
         let _ = scene_menu.append_items(&[&prev, &next, &sep(), &reload]);
-        let device_menu = Submenu::new("AE-30", true);
+        let device_menu = Submenu::new("Aerophone", true);
         let _ = device_menu.append_items(&[
             &connect,
             &disconnect,

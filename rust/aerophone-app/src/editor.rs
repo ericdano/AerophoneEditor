@@ -443,6 +443,26 @@ impl Editor {
         }
     }
 
+    /// The connected model's name for messages ("AE-30" until known).
+    pub fn device_name(&self) -> &'static str {
+        match self.model() {
+            Some(Model::Ae20) => "AE-20",
+            _ => "AE-30",
+        }
+    }
+
+    /// Settings for the AE-30's Thumb Pad and Motion controller, which the
+    /// AE-20 doesn't have: hidden while an AE-20 is connected. (It still
+    /// keeps them in memory, so reads and backups are unchanged.)
+    pub fn hides(&self, p: &Param) -> bool {
+        self.model() == Some(Model::Ae20) && ae30_only(p.label())
+    }
+
+    /// Controllers-tab entries the connected model doesn't have.
+    pub fn hides_controller(&self, key: &str) -> bool {
+        self.model() == Some(Model::Ae20) && matches!(key, "pad_1" | "motion_1")
+    }
+
     pub fn is_loading(&self) -> bool {
         self.pending.values().any(|&n| n > 0) || self.loading_names
     }
@@ -545,7 +565,7 @@ impl Editor {
             }
             Event::IdentityTimeout => {
                 self.conn = Conn::Failed(
-                    "The AE-30 didn't answer. Is it on, with its USB driver mode set to Generic?"
+                    "The Aerophone didn't answer. Is it on, with its USB driver mode set to Generic?"
                         .into(),
                 );
             }
@@ -1020,7 +1040,7 @@ impl Editor {
             Err(e) => return self.warn(format!("Couldn't read {}: {e}", path.display())),
         };
         let Some(img) = syx::scene_from_syx(&bytes) else {
-            return self.warn("That file has no AE-30 scene in it.");
+            return self.warn("That file has no Aerophone scene in it.");
         };
         for b in img.blocks.iter().filter(|b| b.is_loaded()) {
             self.scene.apply(b.addr, &b.data);
@@ -1165,14 +1185,16 @@ impl Editor {
             let mut notes = Vec::new();
             if r.patched_bytes > 0 {
                 notes.push(format!(
-                    "{} values the AE-30 changed on saving were put back",
-                    r.patched_bytes
+                    "{} values the {} changed on saving were put back",
+                    r.patched_bytes,
+                    self.device_name()
                 ));
             }
             if r.corrected > 0 {
                 notes.push(format!(
-                    "{} settings of unused effects or out-of-range values were set by the AE-30 itself",
-                    r.corrected
+                    "{} settings of unused effects or out-of-range values were set by the {} itself",
+                    r.corrected,
+                    self.device_name()
                 ));
             }
             let fixed = if notes.is_empty() {
@@ -1318,6 +1340,12 @@ impl Editor {
 fn cache_path() -> Option<std::path::PathBuf> {
     let dirs = crate::paths::dirs()?;
     Some(dirs.cache_dir().join("preset-scenes.txt"))
+}
+
+/// Labels of settings for the Thumb Pad and Motion controller (AE-30 only).
+fn ae30_only(label: &str) -> bool {
+    let l = label.to_lowercase();
+    l.contains("motion") || l.contains("thumb") || l.ends_with("select pad")
 }
 
 fn load_preset_cache() -> Vec<SceneName> {

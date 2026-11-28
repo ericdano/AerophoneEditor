@@ -91,7 +91,7 @@ fn not_loaded(ui: &mut Ui, ed: &Editor) {
     ui.vertical_centered(|ui| {
         if ed.is_online() {
             ui.spinner();
-            ui.label("Reading from the AE-30…");
+            ui.label(format!("Reading from the {}…", ed.device_name()));
         } else {
             ui.label(RichText::new("Not connected").weak());
         }
@@ -859,9 +859,12 @@ pub fn controllers(ui: &mut Ui, view: &mut View, ed: &mut Editor) {
         );
         ui.label(
             RichText::new(if view.ctl_midi {
-                "What each controller sends to external MIDI gear (MIDI Control mode)."
+                "What each controller sends to external MIDI gear (MIDI Control mode).".to_string()
             } else {
-                "What each controller does to the AE-30's own sound."
+                format!(
+                    "What each controller does to the {}'s own sound.",
+                    ed.device_name()
+                )
             })
             .color(pal.weak),
         );
@@ -872,7 +875,7 @@ pub fn controllers(ui: &mut Ui, view: &mut View, ed: &mut Editor) {
             ui.vertical(|ui| {
                 ui.set_width(150.0);
                 for (i, (key, name)) in CONTROLLERS.iter().enumerate() {
-                    if *key == "ctrl" && !view.ctl_midi {
+                    if *key == "ctrl" && !view.ctl_midi || ed.hides_controller(key) {
                         continue;
                     }
                     let used = slots_in_use(ed, &assign_block(key, view.ctl_midi));
@@ -885,6 +888,9 @@ pub fn controllers(ui: &mut Ui, view: &mut View, ed: &mut Editor) {
                 }
             })
         });
+        if ed.hides_controller(CONTROLLERS[view.ctl.min(CONTROLLERS.len() - 1)].0) {
+            view.ctl = 0;
+        }
         let (key, name) = CONTROLLERS[view.ctl.min(CONTROLLERS.len() - 1)];
         ui.vertical(|ui| {
             ui.label(theme::title(name, 17.0));

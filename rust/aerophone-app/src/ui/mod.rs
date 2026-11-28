@@ -572,7 +572,8 @@ impl App {
             if ui
                 .add_enabled(online, egui::Button::new("Import…"))
                 .on_hover_text(format!(
-                    "Load a .syx scene into the AE-30, not stored until you save ({shortcut}O)"
+                    "Load a .syx scene into the {dev}, not stored until you save ({shortcut}O)",
+                    dev = self.ed.device_name()
                 ))
                 .clicked()
             {
@@ -600,7 +601,10 @@ impl App {
                     online && self.ed.backup.is_none() && self.ed.restore.is_none(),
                     egui::Button::new("Restore…"),
                 )
-                .on_hover_text("Write scenes from a .syx backup back to the AE-30")
+                .on_hover_text(format!(
+                    "Write scenes from a .syx backup back to the {}",
+                    self.ed.device_name()
+                ))
                 .clicked()
             {
                 run = Some(Command::Restore);
@@ -903,7 +907,7 @@ impl App {
                 PlConfirm::Clear => (
                     "Clear setlist?",
                     format!(
-                        "Remove all {} entries from \"{}\"? The scenes on the AE-30 aren't changed.",
+                        "Remove all {} entries from \"{}\"? The scenes on the Aerophone aren't changed.",
                         pl.entries().len(),
                         pl.list_name()
                     ),
@@ -912,7 +916,7 @@ impl App {
                 PlConfirm::Delete(l) => (
                     "Delete setlist?",
                     format!(
-                        "Delete \"{}\" and its {} entries? The scenes on the AE-30 aren't changed.",
+                        "Delete \"{}\" and its {} entries? The scenes on the Aerophone aren't changed.",
                         pl.lists.get(l).map_or("", |x| x.name.as_str()),
                         pl.lists.get(l).map_or(0, |x| x.entries.len())
                     ),
@@ -1046,7 +1050,7 @@ impl App {
                 };
                 ui.label(RichText::new(bend_text).size(12.0).color(pal.weak))
                     .on_hover_text(
-                        "Pitch bend the AE-30 sends (bite, wheel), as a share of the bend range",
+                        "Pitch bend the Aerophone sends (bite, wheel), as a share of the bend range",
                     );
                 ui.add_space(10.0);
 
@@ -1079,18 +1083,18 @@ impl App {
                 ui.set_width(460.0);
                 ui.vertical_centered(|ui| {
                     ui.label(theme::title(APP_NAME, 24.0));
-                    ui.label(RichText::new("For the Roland Aerophone Pro AE-30").color(pal.weak));
+                    ui.label(RichText::new("For the Roland Aerophone Pro AE-30 and Aerophone AE-20").color(pal.weak));
                     ui.add_space(14.0);
                     match &self.ed.conn {
                         Conn::Connecting => {
                             ui.spinner();
-                            ui.label("Looking for the AE-30…");
+                            ui.label("Looking for the Aerophone…");
                         }
                         Conn::Failed(e) => {
                             let headline = if e.starts_with("no MIDI") {
-                                "The AE-30 isn't showing up. Is it switched on and connected by USB?"
+                                "The Aerophone isn't showing up. Is it switched on and connected by USB?"
                             } else {
-                                "The AE-30 didn't answer."
+                                "The Aerophone didn't answer."
                             };
                             ui.label(RichText::new(headline).color(pal.bad));
                             ui.label(RichText::new("The editor connects by itself as soon as it appears.").size(12.0).color(pal.weak));
@@ -1246,7 +1250,7 @@ impl App {
         if scenes.is_empty() {
             return self
                 .ed
-                .warn("That file has no complete AE-30 scenes in it.");
+                .warn("That file has no complete Aerophone scenes in it.");
         }
         let original = scenes
             .iter()
@@ -1394,8 +1398,9 @@ impl App {
                 ui.label(RichText::new("Some scenes don't fit before U12-50 and will be skipped.").color(pal.amber));
             }
             let mut warn = format!(
-                "This writes {count} scene{} to the AE-30",
-                if count == 1 { "" } else { "s" }
+                "This writes {count} scene{} to the {}",
+                if count == 1 { "" } else { "s" },
+                self.ed.device_name()
             );
             if overwrites > 0 {
                 warn += &format!(", replacing {overwrites} named scene{}", if overwrites == 1 { "" } else { "s" });
@@ -1653,7 +1658,7 @@ impl App {
                     RichText::new(format!("Version {}", env!("CARGO_PKG_VERSION"))).color(pal.weak),
                 );
                 ui.add_space(8.0);
-                ui.label("A scene and tone editor for the Roland Aerophone Pro AE-30.");
+                ui.label("A scene and tone editor for the Roland Aerophone Pro AE-30 and Aerophone AE-20.");
                 ui.label(RichText::new("Copyright © 2027 Eric Dannewitz").color(pal.weak));
                 ui.add_space(10.0);
                 ui.hyperlink_to(
@@ -1725,8 +1730,11 @@ impl App {
             let overwrite = !(target.is_empty() || target == "INIT SCENE");
             if overwrite {
                 ui.label(
-                    RichText::new(format!("This replaces \"{target}\" on the AE-30."))
-                        .color(pal.amber),
+                    RichText::new(format!(
+                        "This replaces \"{target}\" on the {}.",
+                        self.ed.device_name()
+                    ))
+                    .color(pal.amber),
                 );
             }
             ui.add_space(8.0);

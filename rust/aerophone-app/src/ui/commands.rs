@@ -226,7 +226,7 @@ impl App {
             (s.can_redo, "Redo", key("Y"), Command::Redo),
             (s.loaded, "Previous Scene", key("["), Command::PrevScene),
             (s.loaded, "Next Scene", key("]"), Command::NextScene),
-            (s.online, "Reload from AE-30", key("R"), Command::Reload),
+            (s.online, "Reload from Aerophone", key("R"), Command::Reload),
         ];
         for (i, (enabled, text, short, c)) in entries.into_iter().enumerate() {
             if i == 5 || i == 7 {

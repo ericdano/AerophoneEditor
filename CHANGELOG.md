@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **Works with the Aerophone AE-20:** tested on a real AE-20 (loading, live editing, scene and tone names, saving scenes, setlists). With an AE-20 connected, the AE-30's Thumb Pad and Motion settings are hidden and the app says "AE-20" where it names the instrument. Set the AE-20's USB Driver to Generic, as with the AE-30.
+
 ## v0.6.0 — 2026-11-26
 
 On the Live tab you can now hide the side panels and give the knobs the whole window.

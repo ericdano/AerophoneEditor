@@ -118,7 +118,9 @@ pub fn grid<'a>(
         .min_col_width(110.0)
         .show(ui, |ui| {
             for p in params {
-                row(ui, ed, t, block, p);
+                if !ed.hides(p) {
+                    row(ui, ed, t, block, p);
+                }
             }
         });
 }
