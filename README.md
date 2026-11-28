@@ -1,11 +1,11 @@
 # Aerophone Editor
 
-A scene and tone editor for the Roland Aerophone Pro AE-30 (and AE-20), written in Rust. It talks to the instrument over USB MIDI (or Bluetooth MIDI on macOS) using Roland's SysEx protocol. Every change is sent to the AE-30 as you make it, so you hear it immediately.
+A scene and tone editor for the Roland Aerophone Pro AE-30 and Aerophone AE-20 (both tested), written in Rust. It talks to the instrument over USB MIDI (or Bluetooth MIDI on macOS) using Roland's SysEx protocol. Every change is sent to the instrument as you make it, so you hear it immediately.
 
 Copyright © 2027 Eric Dannewitz. If you find it useful, you can [buy me a coffee](https://buymeacoffee.com/ericdannewitz).
 
 ## Features
-- **Live:** a performance screen with the scene's name, big knobs for reverb, chorus, delay and Color (the insert effect) with a type menu under each, and sliders for level and dark/bright. On the right, named setlists hold your scenes for each gig (create, rename, switch and delete them from the setlist menu; Select lets you tick entries to remove, or clear a whole setlist); click an entry, or use the arrow keys or Page Up/Down (most page-turner pedals send these), to switch. Each entry keeps its own copy of the scene, including tweaks you make while it plays. Nothing is stored until you pick an edited entry again: it is then saved in an empty user scene, counting down from U12-50 (only slots named INIT SCENE are used), so later picks are instant.
+- **Live:** a performance screen with the scene's name, big knobs for reverb, chorus, delay and Color (the insert effect) with a type menu under each, and sliders for level and dark/bright. On the right, named setlists hold your scenes for each gig (create, rename, switch and delete them from the setlist menu; Select lets you tick entries to remove, or clear a whole setlist); click an entry, or use the arrow keys or Page Up/Down (most page-turner pedals send these), to switch. Each entry keeps its own copy of the scene, including tweaks you make while it plays. Nothing is stored until you pick an edited entry again: it is then saved in an empty user scene, counting down from U12-50 (only slots named INIT SCENE are used), so later picks are instant. A setlist made on one instrument also works on another: an entry whose scene isn't in the same slot there plays from its own copy.
 
   <img src="docs/images/live.png" width="70%">
   
@@ -59,7 +59,7 @@ Packages:
 
 ## Connecting the AE-30
 
-Connect it by USB. If your computer doesn't see it, install Roland's AE-30 USB driver or set the AE-30's USB driver mode to Generic. Close Roland's phone app while editing, so the two don't conflict. The editor finds the AE-30 automatically and reconnects if you unplug it.
+Connect it by USB. If your computer doesn't see it, set the instrument's USB Driver to Generic (in its System menu) and switch it off and on, or install Roland's USB driver. Close Roland's phone app while editing, so the two don't conflict. The editor finds the AE-30 or AE-20 automatically and reconnects if you unplug it.
 
 ### Bluetooth (macOS)
 

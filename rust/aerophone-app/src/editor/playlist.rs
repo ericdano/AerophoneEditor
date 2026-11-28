@@ -489,7 +489,7 @@ impl Editor {
         let e = self.playlist.entries()[i].clone();
         let name = e.name();
         if !e.changed {
-            if let Some((m, l, p)) = e.source {
+            if let Some((m, l, p)) = e.source.filter(|_| self.source_holds(&e)) {
                 self.playlist.at = Some(SceneRef::from_bank(m, l, p));
                 self.select_scene(m, l, p);
                 return;
@@ -547,6 +547,30 @@ impl Editor {
         let at = Instant::now() + self.session.queued_time() + SETTLE;
         self.tone_reload = [Some(at); 4];
         self.save_playlist();
+    }
+
+    /// Does the entry's source scene on this unit still have the entry's
+    /// name? A setlist made on another Aerophone (or a slot overwritten
+    /// since) points at a different scene; selecting it by number would
+    /// play the wrong one and copy it over the entry, so such entries play
+    /// from their own copy instead. False while the names are unknown.
+    fn source_holds(&self, e: &Entry) -> bool {
+        let Some((m, l, p)) = e.source else {
+            return false;
+        };
+        let name = e.name();
+        let same = |n: &str| !n.is_empty() && n.trim_end() == name.trim_end();
+        match SceneRef::from_bank(m, l, p) {
+            SceneRef::User(n) => self
+                .user_names
+                .get(usize::from(n - 1))
+                .is_some_and(|s| same(s)),
+            SceneRef::Preset { .. } => self
+                .preset_names
+                .iter()
+                .any(|s| (s.msb, s.lsb, s.pc) == (m, l, p) && same(&s.name)),
+            SceneRef::Unknown { .. } => false,
+        }
     }
 
     /// Copy edits of the playing scene into the active entry. `strict`
@@ -622,7 +646,8 @@ impl Editor {
             return String::new();
         };
         match (&e.slot, e.changed, e.stored) {
-            (Some((n, _)), true, true) => slot_label(*n),
+            // Stored: edited, or copied over from another unit.
+            (Some((n, _)), _, true) => slot_label(*n),
             (_, true, _) => "edited".into(),
             _ => e.source_ref().map_or_else(String::new, |r| r.to_string()),
         }
@@ -740,6 +765,36 @@ mod tests {
         let e = &ed.playlist.entries()[0];
         assert!(!e.stored);
         assert_eq!(e.name(), "Solo 2");
+    }
+
+    #[test]
+    fn unchanged_entry_from_another_unit_plays_its_copy() {
+        let mut ed = editor();
+        ed.user_names[6] = "VA Simple Sine".into();
+        let entry = |name: &str| Entry {
+            scene: scene(name),
+            source: Some((85, 0, 6)),
+            slot: None,
+            changed: false,
+            stored: false,
+        };
+        // Same name in U01-07: selected by number.
+        ed.playlist.entries_mut().push(entry("VA Simple Sine"));
+        ed.playlist_play(0);
+        assert_eq!(ed.current_scene(), Some(SceneRef::User(7)));
+        assert!(ed.playlist.entries()[0].slot.is_none());
+        // Another scene there (made on another unit): its copy is stored
+        // in a free slot and played from there, then selected next time.
+        ed.playlist.entries_mut().push(entry("Fat Brass"));
+        ed.playlist_play(1);
+        let e = &ed.playlist.entries()[1];
+        assert_eq!(e.slot, Some((599, "Fat Brass".into())));
+        assert_eq!(ed.current_scene(), Some(SceneRef::User(600)));
+        assert_eq!(ed.scene.scene_name().as_deref(), Some("Fat Brass"));
+        assert_eq!(ed.playlist_where(1), "U12-50");
+        ed.playlist_play(0);
+        ed.playlist_play(1);
+        assert_eq!(ed.current_scene(), Some(SceneRef::User(600)));
     }
 
     #[test]

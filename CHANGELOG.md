@@ -6,6 +6,10 @@
 
 - **Works with the Aerophone AE-20:** tested on a real AE-20 (loading, live editing, scene and tone names, saving scenes, setlists). With an AE-20 connected, the AE-30's Thumb Pad and Motion settings are hidden and the app says "AE-20" where it names the instrument. Set the AE-20's USB Driver to Generic, as with the AE-30.
 
+### Fixed
+
+- **Setlists made on another instrument:** an unedited setlist entry used to switch to its scene by slot number only, so on a second Aerophone (or after that slot was overwritten) it played whatever scene is there and copied it over the entry. Now it checks the slot still holds a scene with that name; if not, it plays its own copy, stored in a free user scene like an edited entry.
+
 ## v0.6.0 — 2026-11-26
 
 On the Live tab you can now hide the side panels and give the knobs the whole window.
