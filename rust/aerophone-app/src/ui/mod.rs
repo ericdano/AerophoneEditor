@@ -1131,7 +1131,7 @@ impl App {
                         self.connect_demo(ui.ctx());
                     }
                     ui.add_space(12.0);
-                    let help = "Connect the AE-30 by USB. If it doesn't show up, set its USB Driver to \
+                    let help = "Connect the Aerophone by USB. If it doesn't show up, set its USB Driver to \
                                 Generic (Menu ▸ System ▸ USB). Close Roland's phone app first.";
                     ui.label(
                         RichText::new(help)
