@@ -57,6 +57,13 @@ impl Tab {
     }
 }
 
+/// What fills a compact window instead of the page.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Sheet {
+    Scenes,
+    Setlist,
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum FxSel {
     Mfx(u8),
@@ -118,6 +125,10 @@ pub struct View {
     /// Naming a setlist: (which, or None for a new one; the name).
     pub pl_name: Option<(Option<usize>, String)>,
     pub pl_confirm: Option<PlConfirm>,
+    /// Small window: one column, the scene
+    /// list and setlist as full-window sheets instead of side panels.
+    pub compact: bool,
+    pub sheet: Option<Sheet>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -154,6 +165,8 @@ impl Default for View {
             pl_list: 0,
             pl_name: None,
             pl_confirm: None,
+            compact: false,
+            sheet: None,
         }
     }
 }
@@ -164,6 +177,8 @@ pub struct App {
     started: bool,
     /// When we last looked for the AE-30 while offline.
     last_scan: Option<std::time::Instant>,
+    started_sheet: bool,
+    launched: std::time::Instant,
     pub prefs: prefs::Prefs,
     #[cfg(target_os = "macos")]
     native_menu: Option<native_menu::NativeMenu>,
@@ -194,6 +209,8 @@ impl App {
             },
             started: false,
             last_scan: None,
+            started_sheet: false,
+            launched: std::time::Instant::now(),
             icon: None,
             prefs,
             #[cfg(target_os = "macos")]
@@ -311,6 +328,9 @@ impl App {
     // ---- top bar --------------------------------------------------------
 
     fn top_bar(&mut self, ui: &mut Ui) {
+        if self.view.compact {
+            return self.top_bar_compact(ui);
+        }
         let pal = palette(ui);
         // macOS: the bar sits in the title bar, so empty space in it moves
         // the window and a double-click zooms, like any Mac toolbar.
@@ -459,6 +479,183 @@ impl App {
         });
     }
 
+    /// The top bar of a compact window: scene and actions on one row; the
+    /// scene list button and the tabs (scrolling sideways) below.
+    fn top_bar_compact(&mut self, ui: &mut Ui) {
+        let loaded = self.ed.scene.is_loaded();
+        // Narrow windows: the name goes on the scene list button below.
+        let narrow = ui.available_width() < 520.0;
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 6.0;
+            #[cfg(target_os = "macos")]
+            ui.add_space(70.0);
+            if ui.add_enabled(loaded, egui::Button::new("◀")).clicked() {
+                self.ed.step_scene(-1);
+            }
+            if ui.add_enabled(loaded, egui::Button::new("▶")).clicked() {
+                self.ed.step_scene(1);
+            }
+            let name = if loaded {
+                self.ed.scene_name()
+            } else {
+                APP_NAME.to_string()
+            };
+            if !narrow || !loaded {
+                let right = if loaded { 150.0 } else { 40.0 };
+                let w = (ui.available_width() - right).max(40.0);
+                ui.add_sized(
+                    vec2(w, 24.0),
+                    egui::Label::new(RichText::new(name).size(17.0).family(theme::semibold()))
+                        .truncate(),
+                );
+            }
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                if !self.has_native_menu() {
+                    ui.menu_button("☰", |ui| self.menu_contents(ui));
+                }
+                if loaded {
+                    if ui.add(theme::primary(ui, "Save…")).clicked() {
+                        self.open_save();
+                    }
+                    let redo = !self.ed.redo.is_empty();
+                    if ui.add_enabled(redo, egui::Button::new("↷")).clicked() {
+                        self.ed.redo();
+                    }
+                    let undo = !self.ed.undo.is_empty();
+                    if ui.add_enabled(undo, egui::Button::new("↶")).clicked() {
+                        self.ed.undo();
+                    }
+                }
+            });
+        });
+        if !self.ed.is_online() {
+            return;
+        }
+        ui.add_space(4.0);
+        if narrow {
+            self.scenes_button(ui, true);
+            ui.add_space(4.0);
+        }
+        ui.horizontal(|ui| {
+            if !narrow {
+                self.scenes_button(ui, false);
+            }
+            egui::ScrollArea::horizontal()
+                .id_salt("tabs")
+                .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
+                .show(ui, |ui| {
+                    let tabs = [
+                        (Tab::Live, "Live"),
+                        (Tab::Scene, "Scene"),
+                        (Tab::Part, "Parts"),
+                        (Tab::Effects, "Effects"),
+                        (Tab::Controllers, "Controllers"),
+                        (Tab::Tone, "Tone"),
+                        (Tab::System, "System"),
+                    ];
+                    let before = self.view.tab;
+                    widgets::segmented(ui, &mut self.view.tab, &tabs);
+                    if self.view.tab != before {
+                        self.view.sheet = None;
+                    }
+                });
+        });
+    }
+
+    /// The compact top bar's scene list button: the scene's place (and
+    /// with `with_name`, its name), opening the list.
+    fn scenes_button(&mut self, ui: &mut Ui, with_name: bool) {
+        let pal = palette(ui);
+        let loaded = self.ed.scene.is_loaded();
+        let open = self.view.sheet == Some(Sheet::Scenes);
+        let badge = match self.ed.current_scene() {
+            Some(SceneRef::User(n)) => {
+                format!("U{:02}-{:02}", (n - 1) / 50 + 1, (n - 1) % 50 + 1)
+            }
+            Some(SceneRef::Preset { category, program }) => {
+                format!("P{category:02}-{program:02}")
+            }
+            _ => "Scenes".into(),
+        };
+        let text = if with_name && loaded {
+            format!("☰ {badge}  {}", self.ed.scene_name())
+        } else {
+            format!("☰ {badge}")
+        };
+        // Accent text, except on the (accent) highlight while open.
+        let mut label = RichText::new(text).family(theme::semibold());
+        if !open {
+            label = label.color(pal.accent);
+        }
+        let b = egui::Button::new(label).selected(open);
+        if ui.add(b).clicked() {
+            self.view.sheet = if open { None } else { Some(Sheet::Scenes) };
+        }
+    }
+
+    /// A compact window's scene list or setlist, filling the window.
+    fn sheet(&mut self, ui: &mut Ui, sheet: Sheet) {
+        ui.horizontal(|ui| {
+            let title = match sheet {
+                Sheet::Scenes => "Scenes",
+                Sheet::Setlist => "Setlist",
+            };
+            ui.label(theme::title(title, 18.0));
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                if ui.add(theme::primary(ui, "Done")).clicked() {
+                    self.view.sheet = None;
+                }
+            });
+        });
+        let before = self.ed.current_scene();
+        match sheet {
+            Sheet::Scenes => self.library(ui),
+            Sheet::Setlist => self.playlist(ui),
+        }
+        // Picking a scene closes the list, like a menu.
+        if sheet == Sheet::Scenes && self.ed.current_scene() != before {
+            self.view.sheet = None;
+        }
+    }
+
+    /// Compact Live tab: step through the setlist from the bottom of the
+    /// window; the middle opens the whole setlist.
+    fn setlist_bar(&mut self, ui: &mut Ui) {
+        let pl = &self.ed.playlist;
+        let n = pl.entries().len();
+        let label = match pl.active {
+            Some(i) if i < n => format!("{}/{n} · {}", i + 1, pl.entries()[i].name()),
+            _ => format!("{} ({n})", pl.list_name()),
+        };
+        ui.horizontal(|ui| {
+            let h = 40.0;
+            let side = 96.0;
+            if ui
+                .add_enabled(
+                    n > 0,
+                    egui::Button::new("◀ Previous").min_size(vec2(side, h)),
+                )
+                .clicked()
+            {
+                self.ed.playlist_step(-1);
+            }
+            let mid = (ui.available_width() - side - 8.0).max(60.0);
+            let r = ui.add_sized(
+                vec2(mid, h),
+                egui::Button::new(RichText::new(label).family(theme::semibold())).truncate(),
+            );
+            if r.on_hover_text("Show the setlist").clicked() {
+                self.view.sheet = Some(Sheet::Setlist);
+            }
+            if ui
+                .add_enabled(n > 0, egui::Button::new("Next ▶").min_size(vec2(side, h)))
+                .clicked()
+            {
+                self.ed.playlist_step(1);
+            }
+        });
+    }
+
     // ---- library ----------------------------------------------------------
 
     fn library(&mut self, ui: &mut Ui) {
@@ -470,7 +667,7 @@ impl App {
                 &mut self.view.lib_user,
                 &[(true, "User"), (false, "Presets")],
             );
-            if self.view.tab == Tab::Live {
+            if self.view.tab == Tab::Live && !self.view.compact {
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     if ui
                         .button("«")
@@ -659,7 +856,7 @@ impl App {
         // Setlist picker and its menu.
         let mut pick = None;
         ui.horizontal(|ui| {
-            if ui.button("»").on_hover_text("Hide the setlist").clicked() {
+            if !self.view.compact && ui.button("»").on_hover_text("Hide the setlist").clicked() {
                 self.set_live_panels(self.prefs.live_library, false);
             }
             ui.label(theme::section(ui, "Setlist"));
@@ -968,7 +1165,11 @@ impl App {
             let (color, text) = match &self.ed.conn {
                 Conn::Online(_) if self.ed.is_demo() => (
                     pal.amber,
-                    "Demo mode · simulated AE-30, nothing is sent over MIDI".to_string(),
+                    if self.view.compact {
+                        "Demo mode · nothing is sent over MIDI".to_string()
+                    } else {
+                        "Demo mode · simulated AE-30, nothing is sent over MIDI".to_string()
+                    },
                 ),
                 Conn::Online(id) => (
                     pal.good,
@@ -1028,6 +1229,9 @@ impl App {
                     }));
                 }
             }
+            if self.view.compact {
+                return;
+            }
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 // Live meters from what the AE-30 sends while you play
                 // (laid out right to left).
@@ -1081,10 +1285,12 @@ impl App {
 
     fn welcome(&mut self, ui: &mut Ui) {
         let pal = palette(ui);
-        ui.add_space(60.0);
+        // At most 460 pt wide, less in narrow windows (card margins included).
+        let width = 460f32.min(ui.available_width() - 30.0).max(200.0);
+        ui.add_space(if self.view.compact { 12.0 } else { 60.0 });
         ui.vertical_centered(|ui| {
             theme::card(ui).show(ui, |ui| {
-                ui.set_width(460.0);
+                ui.set_width(width);
                 ui.vertical_centered(|ui| {
                     ui.label(theme::title(APP_NAME, 24.0));
                     ui.label(RichText::new("For the Roland Aerophone Pro AE-30 and Aerophone AE-20").color(pal.weak));
@@ -1114,7 +1320,7 @@ impl App {
                         ui.label("Port");
                         egui::ComboBox::from_id_salt("port")
                             .selected_text(self.view.port.clone().unwrap_or_else(|| "Find automatically".into()))
-                            .width(240.0)
+                            .width(240f32.min(width - 60.0))
                             .show_ui(ui, |ui| {
                                 ui.selectable_value(&mut self.view.port, None, "Find automatically");
                                 for p in ports {
@@ -2093,13 +2299,56 @@ impl eframe::App for App {
         } else {
             bar
         };
+        // Keep drawing for the first seconds: on iOS the first frames can
+        // come before the window is ready, and an idle app would stay black
+        // until touched.
+        if self.launched.elapsed() < Duration::from_secs(6) {
+            ctx.request_repaint_after(Duration::from_millis(200));
+        }
+        let screen = ctx.content_rect();
+        self.view.compact = screen.width() < 760.0 || screen.height() < 520.0;
+        // Developer aid: `AE30_SHEET=scenes|setlist` opens one (compact only).
+        if !self.started_sheet && self.ed.is_online() {
+            self.started_sheet = true;
+            self.view.sheet = match std::env::var("AE30_SHEET").as_deref() {
+                Ok("scenes") => Some(Sheet::Scenes),
+                Ok("setlist") => Some(Sheet::Setlist),
+                _ => None,
+            };
+        }
+        if !self.view.compact || (!self.ed.is_online() && self.started_sheet) {
+            self.view.sheet = None;
+        }
         egui::Panel::top("top")
             .frame(top)
             .show(ui, |ui| self.top_bar(ui));
-        egui::Panel::bottom("status")
-            .frame(bar.inner_margin(egui::Margin::symmetric(14, 5)))
-            .show(ui, |ui| self.status_bar(ui));
+        // Compact windows: the status bar only when it has something to say
+        // (demo mode, connecting, a message, a backup).
+        let quiet = self.view.compact
+            && self.ed.is_online()
+            && !self.ed.is_demo()
+            && self.ed.backup.is_none()
+            && self.ed.restore.is_none()
+            && self
+                .ed
+                .status
+                .as_ref()
+                .is_none_or(|(_, at, _)| at.elapsed() >= Duration::from_secs(8));
+        if !quiet {
+            egui::Panel::bottom("status")
+                .frame(bar.inner_margin(egui::Margin::symmetric(14, 5)))
+                .show(ui, |ui| self.status_bar(ui));
+        }
         let live = self.view.tab == Tab::Live;
+        let compact = self.view.compact;
+        if compact && live && self.ed.is_online() {
+            self.playlist_keys(&ctx);
+            if self.view.sheet.is_none() {
+                egui::Panel::bottom("setlist_bar")
+                    .frame(bar.inner_margin(egui::Margin::symmetric(10, 6)))
+                    .show(ui, |ui| self.setlist_bar(ui));
+            }
+        }
         // On the Live tab either side panel can be folded into a thin strip.
         let strip = |ui: &mut Ui, id: &'static str, left: bool, text: &str, tip: &str| {
             let frame = bar.inner_margin(egui::Margin::symmetric(4, 10));
@@ -2124,7 +2373,7 @@ impl eframe::App for App {
             }
             open
         };
-        if self.ed.is_online() {
+        if self.ed.is_online() && !compact {
             if live && !self.prefs.live_library {
                 if strip(ui, "library_strip", true, "»", "Show the scene list") {
                     self.set_live_panels(true, self.prefs.live_setlist);
@@ -2138,7 +2387,7 @@ impl eframe::App for App {
                     .show(ui, |ui| self.library(ui));
             }
         }
-        if self.ed.is_online() && live {
+        if self.ed.is_online() && live && !compact {
             self.playlist_keys(&ctx);
             if !self.prefs.live_setlist {
                 if strip(ui, "playlist_strip", false, "«", "Show the setlist") {
@@ -2155,10 +2404,13 @@ impl eframe::App for App {
         }
         let page = egui::Frame::new()
             .fill(pal.bg)
-            .inner_margin(egui::Margin::same(16));
+            .inner_margin(egui::Margin::same(if compact { 10 } else { 16 }));
         egui::CentralPanel::default().frame(page).show(ui, |ui| {
             if !self.ed.is_online() {
                 return self.welcome(ui);
+            }
+            if let Some(sheet) = self.view.sheet {
+                return self.sheet(ui, sheet);
             }
             egui::ScrollArea::vertical()
                 .id_salt(("page", self.view.tab as u8))

@@ -45,12 +45,24 @@ fn take_option(args: &mut Vec<String>, name: &str) -> Option<String> {
     (i < args.len()).then(|| args.remove(i))
 }
 
+/// The window size: 1320×880, or `AE30_WINDOW=WxH` (screenshots, layouts).
+fn window_size() -> [f32; 2] {
+    std::env::var("AE30_WINDOW")
+        .ok()
+        .and_then(|v| {
+            let (w, h) = v.split_once('x')?;
+            Some([w.trim().parse().ok()?, h.trim().parse().ok()?])
+        })
+        .unwrap_or([1320.0, 880.0])
+}
+
 fn gui() -> ExitCode {
     let mut viewport = egui::ViewportBuilder::default()
         .with_title(ui::APP_NAME)
         .with_app_id("ae30-patch-editor")
-        .with_inner_size([1320.0, 880.0])
-        .with_min_inner_size([900.0, 560.0]);
+        .with_inner_size(window_size())
+        // Small windows get the compact layout.
+        .with_min_inner_size([360.0, 360.0]);
     if let Ok(icon) = eframe::icon_data::from_png_bytes(ui::ICON_PNG) {
         viewport = viewport.with_icon(icon);
     }

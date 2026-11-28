@@ -131,6 +131,9 @@ pub struct Session {
     /// Total messages sent / received, for activity lights.
     pub sent_count: u64,
     pub received_count: u64,
+    /// Gap between outgoing messages as a percentage of [`pace`] (100 =
+    /// Roland's own timing); higher is gentler on slow links.
+    pub gap_percent: u32,
 }
 
 impl Default for Session {
@@ -155,10 +158,16 @@ impl Session {
             events: Vec::new(),
             sent_count: 0,
             received_count: 0,
+            gap_percent: 100,
         }
     }
 
     // ---- requests ----------------------------------------------------------
+
+    /// The gap after a message of `n` bytes.
+    fn gap(&self, n: usize) -> Duration {
+        pace(n) * self.gap_percent / 100
+    }
 
     pub fn identify(&mut self) {
         self.jobs.push_back(Job::Identify);
@@ -296,7 +305,7 @@ impl Session {
 
     /// Roughly how long the messages queued now take to go out.
     pub fn queued_time(&self) -> Duration {
-        self.out.iter().map(|o| pace(o.bytes.len())).sum()
+        self.out.iter().map(|o| self.gap(o.bytes.len())).sum()
     }
 
     pub fn pending_jobs(&self) -> usize {
@@ -332,7 +341,7 @@ impl Session {
         } else {
             return None;
         };
-        self.busy_until = Some(now + pace(bytes.len()));
+        self.busy_until = Some(now + self.gap(bytes.len()));
         self.sent_count += 1;
         Some(bytes)
     }
@@ -390,7 +399,7 @@ impl Session {
         let mut t = now;
         for &(a, n) in &blocks[1..] {
             let bytes = sysex::rq1(self.device, a, n);
-            t += pace(bytes.len());
+            t += self.gap(bytes.len());
             self.out.push_back(Outgoing { bytes, key: None });
         }
         t

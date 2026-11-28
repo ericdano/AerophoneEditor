@@ -15,6 +15,8 @@ const CARD_W: f32 = 370.0;
 
 /// A titled card of fixed width.
 fn card(ui: &mut Ui, title: &str, width: f32, add: impl FnOnce(&mut Ui)) {
+    // Never wider than the page (narrow windows).
+    let width = width.min(ui.max_rect().width()).max(140.0);
     ui.allocate_ui_with_layout(vec2(width, 0.0), Layout::top_down(Align::Min), |ui| {
         theme::card(ui).show(ui, |ui| {
             ui.set_width(width - 26.0);
@@ -257,7 +259,7 @@ pub fn part(ui: &mut Ui, view: &mut View, ed: &mut Editor) {
     if !ed.scene.is_loaded() {
         return not_loaded(ui, ed);
     }
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         widgets::segmented(
             ui,
             &mut view.part,
@@ -389,88 +391,117 @@ pub fn effects(ui: &mut Ui, view: &mut View, ed: &mut Editor) {
     let pal = palette(ui);
     let t = Target::Scene;
     let part_t = data().table("Perf_part");
-    // Routing overview.
-    theme::card(ui).show(ui, |ui| {
-        ui.label(theme::section(ui, "Signal flow"));
-        egui::Grid::new("routing")
-            .spacing(vec2(18.0, 6.0))
-            .show(ui, |ui| {
-                for h in [
-                    "Part", "Tone", "Part MFX", "Then", "Reverb", "Chorus", "Delay",
-                ] {
-                    ui.label(RichText::new(h).size(11.0).color(pal.weak));
-                }
-                ui.end_row();
-                for n in 1..=5u8 {
-                    let block = format!("Perf_part_{n}");
-                    let on = ed.value(t, &block, part_t.at(1).unwrap()) == Some(1);
-                    let txt = |s: String| {
-                        if on {
-                            RichText::new(s)
-                        } else {
-                            RichText::new(s).color(pal.weak)
+    // Routing overview (scrolls sideways in narrow windows).
+    let narrow = ui.available_width() < 640.0;
+    egui::ScrollArea::horizontal()
+        .id_salt("routing_scroll")
+        .show(ui, |ui| {
+            theme::card(ui).show(ui, |ui| {
+                ui.label(theme::section(ui, "Signal flow"));
+                egui::Grid::new("routing")
+                    .spacing(vec2(18.0, 6.0))
+                    .show(ui, |ui| {
+                        for h in [
+                            "Part", "Tone", "Part MFX", "Then", "Reverb", "Chorus", "Delay",
+                        ] {
+                            ui.label(RichText::new(h).size(11.0).color(pal.weak));
                         }
-                    };
-                    ui.label(txt(format!("{n}")));
-                    ui.label(txt(ed.tone_label(n)));
-                    let mfx = format!("Perf_mfx_{n}");
-                    let mtab = data().table("Perf_mfx");
-                    let ty = ed.value(t, &mfx, mtab.at(0).unwrap()).unwrap_or(0);
-                    let sw = ed.value(t, &mfx, mtab.at(1).unwrap()) == Some(1);
-                    let follow = ed.value(t, &block, part_t.at(10).unwrap()) == Some(1);
-                    let label = if follow {
-                        "Tone's own".to_string()
-                    } else if sw {
-                        fx_name("mfx", ty)
-                    } else {
-                        "Off".into()
-                    };
-                    if ui.link(txt(label)).clicked() {
-                        view.fx = FxSel::Mfx(n);
-                    }
-                    let out = ed.value(t, &block, part_t.at(11).unwrap()) == Some(1);
-                    if ui
-                        .link(txt(if out {
-                            "→ IFX".into()
-                        } else {
-                            "→ Dry".into()
-                        }))
-                        .clicked()
-                        && out
-                    {
-                        view.fx = FxSel::Ifx;
-                    }
-                    for off in [7, 8, 9] {
-                        let v = ed.value(t, &block, part_t.at(off).unwrap()).unwrap_or(0);
-                        ui.label(txt(v.to_string()));
-                    }
-                    ui.end_row();
-                }
+                        ui.end_row();
+                        for n in 1..=5u8 {
+                            let block = format!("Perf_part_{n}");
+                            let on = ed.value(t, &block, part_t.at(1).unwrap()) == Some(1);
+                            let txt = |s: String| {
+                                if on {
+                                    RichText::new(s)
+                                } else {
+                                    RichText::new(s).color(pal.weak)
+                                }
+                            };
+                            ui.label(txt(format!("{n}")));
+                            ui.label(txt(ed.tone_label(n)));
+                            let mfx = format!("Perf_mfx_{n}");
+                            let mtab = data().table("Perf_mfx");
+                            let ty = ed.value(t, &mfx, mtab.at(0).unwrap()).unwrap_or(0);
+                            let sw = ed.value(t, &mfx, mtab.at(1).unwrap()) == Some(1);
+                            let follow = ed.value(t, &block, part_t.at(10).unwrap()) == Some(1);
+                            let label = if follow {
+                                "Tone's own".to_string()
+                            } else if sw {
+                                fx_name("mfx", ty)
+                            } else {
+                                "Off".into()
+                            };
+                            if ui.link(txt(label)).clicked() {
+                                view.fx = FxSel::Mfx(n);
+                            }
+                            let out = ed.value(t, &block, part_t.at(11).unwrap()) == Some(1);
+                            if ui
+                                .link(txt(if out {
+                                    "→ IFX".into()
+                                } else {
+                                    "→ Dry".into()
+                                }))
+                                .clicked()
+                                && out
+                            {
+                                view.fx = FxSel::Ifx;
+                            }
+                            for off in [7, 8, 9] {
+                                let v = ed.value(t, &block, part_t.at(off).unwrap()).unwrap_or(0);
+                                ui.label(txt(v.to_string()));
+                            }
+                            ui.end_row();
+                        }
+                    });
             });
-    });
+        });
     ui.add_space(12.0);
-    ui.horizontal_top(|ui| {
-        // Effect list.
-        theme::card(ui).show(ui, |ui| ui.vertical(|ui| {
-            ui.set_width(150.0);
-            ui.label(theme::section(ui, "Effects"));
+    let layout = if narrow {
+        Layout::top_down(Align::Min)
+    } else {
+        Layout::left_to_right(Align::Min)
+    };
+    ui.with_layout(layout, |ui| {
+        // Effect list (a menu in narrow windows).
+        let list = |ui: &mut Ui, fx: &mut FxSel| {
             for n in 1..=5u8 {
-                ui.selectable_value(&mut view.fx, FxSel::Mfx(n), format!("Part {n} MFX"));
+                ui.selectable_value(fx, FxSel::Mfx(n), format!("Part {n} MFX"));
             }
             ui.separator();
-            ui.selectable_value(&mut view.fx, FxSel::Ifx, "Insert (IFX)");
-            ui.selectable_value(&mut view.fx, FxSel::Chorus, "Chorus");
-            ui.selectable_value(&mut view.fx, FxSel::Delay, "Delay");
-            ui.selectable_value(&mut view.fx, FxSel::Reverb, "Reverb");
-        }));
+            ui.selectable_value(fx, FxSel::Ifx, "Insert (IFX)");
+            ui.selectable_value(fx, FxSel::Chorus, "Chorus");
+            ui.selectable_value(fx, FxSel::Delay, "Delay");
+            ui.selectable_value(fx, FxSel::Reverb, "Reverb");
+        };
+        if narrow {
+            let current = match view.fx {
+                FxSel::Mfx(n) => format!("Part {n} MFX"),
+                FxSel::Ifx => "Insert (IFX)".into(),
+                FxSel::Chorus => "Chorus".into(),
+                FxSel::Delay => "Delay".into(),
+                FxSel::Reverb => "Reverb".into(),
+            };
+            egui::ComboBox::from_id_salt("fx_pick")
+                .selected_text(current)
+                .width(200.0)
+                .show_ui(ui, |ui| list(ui, &mut view.fx));
+            ui.add_space(6.0);
+        } else {
+            theme::card(ui).show(ui, |ui| ui.vertical(|ui| {
+                ui.set_width(150.0);
+                ui.label(theme::section(ui, "Effects"));
+                list(ui, &mut view.fx);
+            }));
+        }
         let (block, kind, type_off) = fx_block(view.fx);
         let Some(table) = ed.scene.block(&block).map(|b| b.table) else {
             return;
         };
         let type_p = table.at(type_off).unwrap();
         let ty = ed.value(t, &block, type_p).unwrap_or(0);
+        let editor_w = 460f32.min(ui.available_width() - 26.0).max(200.0);
         theme::card(ui).show(ui, |ui| ui.vertical(|ui| {
-            ui.set_width(460.0);
+            ui.set_width(editor_w);
             ui.horizontal(|ui| {
                 ui.label(theme::title(fx_name(kind, ty), 17.0));
                 ui.add_space(10.0);
@@ -689,13 +720,23 @@ fn live_grid(width: f32, height: f32, gap: f32) -> (usize, f32, f32) {
         let (c, rows) = (cols as f32, (4 / cols) as f32);
         let w = (width - (c - 1.0) * gap) / c;
         let h = (height - OUTPUT_H) / rows - gap - CARD_H;
-        let dial = (w - 70.0).min(h).clamp(MIN_DIAL, MAX_DIAL);
+        // Very low windows may go below the usual
+        // minimum so value and type menu stay visible.
+        let min = if height < 300.0 { 56.0 } else { MIN_DIAL };
+        let dial = (w - 70.0).min(h).clamp(min, MAX_DIAL);
         (cols, w.min(dial * 2.0 + 110.0).max(150.0), dial)
     };
-    let (row, square) = (fit(4), fit(2));
-    if square.2 >= row.2 * 0.8 {
+    // A row of four only when its cards are wide enough; one column on
+    // narrow windows.
+    let wide_enough = |c: usize| (width - (c as f32 - 1.0) * gap) / c as f32 >= 150.0;
+    let (row, square, single) = (fit(4), fit(2), fit(1));
+    if !wide_enough(2) {
+        single
+    } else if !wide_enough(4) || (square.2 >= row.2 * 0.8 && square.2 > MIN_DIAL && height >= 300.0)
+    {
         square
     } else {
+        // Also when the window is too low for bigger knobs either way.
         row
     }
 }
@@ -756,16 +797,23 @@ pub fn live(ui: &mut Ui, ed: &mut Editor) {
         Some(i) => format!("{}: {} of {n}", ed.playlist.list_name(), i + 1),
         None => format!("Not in {}", ed.playlist.list_name()),
     };
-    ui.label(RichText::new(format!("{place}   ·   {list}")).color(pal.weak));
-    ui.horizontal(|ui| {
-        ui.label(theme::title(ed.scene_name(), 34.0));
-        if ed.dirty {
-            ui.label(RichText::new("edited").color(pal.amber));
-        }
-    });
-    let tones: Vec<String> = parts_on(ed).into_iter().map(|p| ed.tone_label(p)).collect();
-    ui.label(RichText::new(tones.join("  ·  ")).color(pal.weak));
-    ui.add_space(14.0);
+    // Low windows: just the name.
+    let short = ui.clip_rect().height() < 420.0;
+    if !short {
+        ui.label(RichText::new(format!("{place}   ·   {list}")).color(pal.weak));
+    }
+    // (Low windows show the name in the top bar already.)
+    if !short {
+        ui.horizontal(|ui| {
+            ui.label(theme::title(ed.scene_name(), 34.0));
+            if ed.dirty {
+                ui.label(RichText::new("edited").color(pal.amber));
+            }
+        });
+        let tones: Vec<String> = parts_on(ed).into_iter().map(|p| ed.tone_label(p)).collect();
+        ui.label(RichText::new(tones.join("  ·  ")).color(pal.weak));
+    }
+    ui.add_space(if short { 6.0 } else { 14.0 });
     // The four effect cards: one row of four, or 2×2 when that gives bigger
     // knobs (tall screens), with the knobs grown to fill the visible space.
     let gap = 12.0;
@@ -851,7 +899,7 @@ pub fn controllers(ui: &mut Ui, view: &mut View, ed: &mut Editor) {
     }
     let pal = palette(ui);
     let t = Target::Scene;
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         widgets::segmented(
             ui,
             &mut view.ctl_midi,
@@ -870,25 +918,45 @@ pub fn controllers(ui: &mut Ui, view: &mut View, ed: &mut Editor) {
         );
     });
     ui.add_space(10.0);
-    ui.horizontal_top(|ui| {
-        theme::card(ui).show(ui, |ui| {
-            ui.vertical(|ui| {
-                ui.set_width(150.0);
-                for (i, (key, name)) in CONTROLLERS.iter().enumerate() {
-                    if *key == "ctrl" && !view.ctl_midi || ed.hides_controller(key) {
-                        continue;
-                    }
-                    let used = slots_in_use(ed, &assign_block(key, view.ctl_midi));
-                    // Grey when unused, but never on the selection highlight.
-                    let text = if used > 0 || view.ctl == i {
-                        RichText::new(*name)
-                    } else {
-                        RichText::new(*name).color(pal.weak)
-                    };
-                    ui.selectable_value(&mut view.ctl, i, text);
+    // Narrow windows: the controller list becomes a menu above the cards.
+    let narrow = ui.available_width() < 560.0;
+    let layout = if narrow {
+        Layout::top_down(Align::Min)
+    } else {
+        Layout::left_to_right(Align::Min)
+    };
+    ui.with_layout(layout, |ui| {
+        let list = |ui: &mut Ui, view: &mut View| {
+            for (i, (key, name)) in CONTROLLERS.iter().enumerate() {
+                if *key == "ctrl" && !view.ctl_midi || ed.hides_controller(key) {
+                    continue;
                 }
-            })
-        });
+                let used = slots_in_use(ed, &assign_block(key, view.ctl_midi));
+                // Grey when unused, but never on the selection highlight.
+                let text = if used > 0 || view.ctl == i {
+                    RichText::new(*name)
+                } else {
+                    RichText::new(*name).color(pal.weak)
+                };
+                ui.selectable_value(&mut view.ctl, i, text);
+            }
+        };
+        if narrow {
+            let current = CONTROLLERS[view.ctl.min(CONTROLLERS.len() - 1)].1;
+            egui::ComboBox::from_id_salt("ctl_pick")
+                .selected_text(current)
+                .width(200.0)
+                .height(500.0)
+                .show_ui(ui, |ui| list(ui, view));
+            ui.add_space(6.0);
+        } else {
+            theme::card(ui).show(ui, |ui| {
+                ui.vertical(|ui| {
+                    ui.set_width(150.0);
+                    list(ui, view);
+                })
+            });
+        }
         if ed.hides_controller(CONTROLLERS[view.ctl.min(CONTROLLERS.len() - 1)].0) {
             view.ctl = 0;
         }
@@ -985,9 +1053,9 @@ pub fn tone(ui: &mut Ui, view: &mut View, ed: &mut Editor) {
     if !ed.image(t).is_loaded() {
         return not_loaded(ui, ed);
     }
-    // Header: name, save.
+    // Header: name, save (buttons wrap below in narrow windows).
     theme::card(ui).show(ui, |ui| {
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             let mut name = ed.image(t).scene_name().unwrap_or_default();
             let r = ui.add(
                 egui::TextEdit::singleline(&mut name)
@@ -998,8 +1066,19 @@ pub fn tone(ui: &mut Ui, view: &mut View, ed: &mut Editor) {
             if r.changed() {
                 ed.rename_tone(part, &name);
             }
-            ui.label(RichText::new(ed.tone_label(part)).color(pal.weak));
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+            let narrow = ui.available_width() < 360.0;
+            if !narrow {
+                ui.label(RichText::new(ed.tone_label(part)).color(pal.weak));
+            }
+            let layout = if narrow {
+                Layout::left_to_right(Align::Center)
+            } else {
+                Layout::right_to_left(Align::Center)
+            };
+            if narrow {
+                ui.end_row();
+            }
+            ui.with_layout(layout, |ui| {
                 if ui
                     .add(theme::primary(ui, "Save Tone…"))
                     .on_hover_text("Store this tone in a User Tone slot so scenes can use it")
@@ -1270,7 +1349,7 @@ pub fn system(ui: &mut Ui, ed: &mut Editor) {
     }
     let t = Target::System;
     theme::card(ui).show(ui, |ui| {
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             ui.label(
                 RichText::new(
                     "System settings change at once but are only kept after a restart once stored.",

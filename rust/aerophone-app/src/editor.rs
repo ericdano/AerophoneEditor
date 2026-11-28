@@ -307,6 +307,8 @@ pub struct Editor {
     pub playlist: Playlist,
     /// While in demo mode: the real setlists and cached preset names.
     saved_playlist: Option<Playlist>,
+    /// Port checks in a row that didn't find the link's ports.
+    port_misses: u8,
     saved_presets: Option<Vec<SceneName>>,
     pending: HashMap<u64, usize>,
     scene_reload: Option<Instant>,
@@ -347,6 +349,7 @@ impl Editor {
             last_rx: None,
             playlist: Playlist::load(),
             saved_playlist: None,
+            port_misses: 0,
             saved_presets: None,
             pending: HashMap::new(),
             scene_reload: None,
@@ -366,6 +369,15 @@ impl Editor {
         };
         match Link::open(&hints, waker) {
             Ok(link) => {
+                // Developer aid: `AE30_PACE=200` doubles the gap between
+                // messages (for testing slow links).
+                if let Some(p) = std::env::var("AE30_PACE").ok().and_then(|v| v.parse().ok()) {
+                    self.session.gap_percent = p;
+                }
+                log(format_args!(
+                    "connect {} (pace {}%)",
+                    link.in_label, self.session.gap_percent
+                ));
                 self.link = Some(link);
                 self.conn = Conn::Connecting;
                 self.session.identify();
@@ -406,6 +418,7 @@ impl Editor {
     }
 
     pub fn disconnect(&mut self) {
+        self.port_misses = 0;
         if let Some(p) = self.saved_playlist.take() {
             self.playlist = p;
         }
@@ -438,6 +451,17 @@ impl Editor {
             return;
         };
         if ins.contains(&link.in_label) && outs.contains(&link.out_label) {
+            self.port_misses = 0;
+            return;
+        }
+        // Missing once can be a glitch (Bluetooth MIDI); letting
+        // go of the port then made the system close the connection for real.
+        self.port_misses += 1;
+        log(format_args!(
+            "port \"{}\" missing ({}x): in {ins:?}",
+            link.in_label, self.port_misses
+        ));
+        if self.port_misses < 2 {
             return;
         }
         let e = format!("no MIDI port \"{}\" any more (disconnected)", link.in_label);
@@ -567,6 +591,16 @@ impl Editor {
     }
 
     fn event(&mut self, ev: Event, now: Instant) {
+        match &ev {
+            Event::Data { .. } => {}
+            Event::SceneNames { user, bank, scenes } => log(format_args!(
+                "names {} bank {bank}: {}",
+                if *user { "user" } else { "preset" },
+                scenes.len()
+            )),
+            Event::UserToneNames(n) => log(format_args!("user tone names: {}", n.len())),
+            e => log(format_args!("{e:?}")),
+        }
         match ev {
             Event::Identity(id) => {
                 self.session.device = id.device;
@@ -577,6 +611,10 @@ impl Editor {
                 }
             }
             Event::IdentityTimeout => {
+                // Let go of the port, so the app keeps looking and tries
+                // again (a Bluetooth instrument may need a moment after
+                // pairing). Holding on to it stopped all retries.
+                self.disconnect();
                 self.conn = Conn::Failed(
                     "The Aerophone didn't answer. Is it on, with its USB driver mode set to Generic?"
                         .into(),
@@ -677,10 +715,22 @@ impl Editor {
     /// Read an area with one streamed request; `finish_image` follows up.
     fn stream(&mut self, tag: u64) {
         self.session.cancel_reads(|t| t != tag);
+        // Over Bluetooth, ask block by block: a streamed area comes back as
+        // one fast burst, which can make an AE-20 drop its Bluetooth link.
+        // Paced requests also pace the replies.
+        let gentle = self
+            .link
+            .as_ref()
+            .is_some_and(|l| l.in_label.contains("Bluetooth"));
         let img = self.image_mut(tag);
         img.invalidate();
         let area = img.area;
-        self.session.read_area(tag, area);
+        if gentle {
+            let blocks = img.missing_reads();
+            self.session.read_blocks(tag, blocks);
+        } else {
+            self.session.read_area(tag, area);
+        }
         self.pending.insert(tag, 1);
     }
 
@@ -1359,6 +1409,16 @@ fn cache_path() -> Option<std::path::PathBuf> {
 fn ae30_only(label: &str) -> bool {
     let l = label.to_lowercase();
     l.contains("motion") || l.contains("thumb") || l.ends_with("select pad")
+}
+
+/// Developer aid: `AE30_LOG=1` prints connection steps with the seconds
+/// since start to stderr.
+pub fn log(args: std::fmt::Arguments) {
+    use std::sync::OnceLock;
+    static ON: OnceLock<Option<Instant>> = OnceLock::new();
+    if let Some(t0) = ON.get_or_init(|| std::env::var_os("AE30_LOG").map(|_| Instant::now())) {
+        eprintln!("[ae30 {:7.2}] {args}", t0.elapsed().as_secs_f32());
+    }
 }
 
 fn load_preset_cache() -> Vec<SceneName> {

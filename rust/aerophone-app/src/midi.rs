@@ -58,12 +58,27 @@ fn output_ports(output: &MidiOutput) -> Vec<(String, MidiOutputPort)> {
 }
 
 /// Labels of the MIDI input and output ports currently available.
+///
+/// One MIDI client pair per thread is created on first use and reused: the
+/// app looks every two seconds, and creating and dropping CoreMIDI clients
+/// that often made iOS drop Bluetooth MIDI connections.
 pub fn list_ports() -> Result<(Vec<String>, Vec<String>), String> {
-    let input = MidiInput::new(CLIENT).map_err(|e| e.to_string())?;
-    let output = MidiOutput::new(CLIENT).map_err(|e| e.to_string())?;
-    let ins = input_ports(&input).into_iter().map(|(l, _)| l).collect();
-    let outs = output_ports(&output).into_iter().map(|(l, _)| l).collect();
-    Ok((ins, outs))
+    thread_local! {
+        static CLIENTS: std::cell::RefCell<Option<(MidiInput, MidiOutput)>> =
+            const { std::cell::RefCell::new(None) };
+    }
+    CLIENTS.with(|c| {
+        let mut c = c.borrow_mut();
+        if c.is_none() {
+            let input = MidiInput::new(CLIENT).map_err(|e| e.to_string())?;
+            let output = MidiOutput::new(CLIENT).map_err(|e| e.to_string())?;
+            *c = Some((input, output));
+        }
+        let (input, output) = c.as_ref().unwrap();
+        let ins = input_ports(input).into_iter().map(|(l, _)| l).collect();
+        let outs = output_ports(output).into_iter().map(|(l, _)| l).collect();
+        Ok((ins, outs))
+    })
 }
 
 /// The best label for `hints` (case-insensitive): the first hint that

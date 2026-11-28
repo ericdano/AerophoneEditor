@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **Compact layout for small windows:** below about 760 × 520 points the window switches to one column. The scene list and setlist open full-window with a Done button, the tabs scroll sideways, the Live tab gets a Previous · current entry · Next bar at the bottom, and the Controllers and Effects lists become menus. Windows can now be made as small as 360 × 360.
+- **Demo mode** starts with a "Demo Gig" setlist, and its scenes use real tones and breath assignments.
+
+### Fixed
+
+- **Bluetooth connections stay up:** the app looked for ports every two seconds in a way that could make the Bluetooth MIDI link drop and reconnect over and over. It now keeps one connection to the system's MIDI service, reads scenes block by block over Bluetooth, and only gives up on a port after it's been missing twice.
+- **Keeps trying after "didn't answer":** if the instrument didn't answer the first time (for example right after Bluetooth pairing), the app used to stop looking. Now it tries again every two seconds.
+- **Connection screen** fits narrow windows.
+- The selected entry on the Controllers tab was unreadable when that controller had no assignments.
+
 ## v0.7.0 — 2026-11-27
 
 Aerophone Editor now works with the Aerophone AE-20, and setlists made on one instrument play correctly on another.
