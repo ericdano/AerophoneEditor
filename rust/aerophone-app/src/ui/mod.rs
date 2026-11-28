@@ -185,7 +185,11 @@ impl App {
         App {
             ed: Editor::new(),
             view: View {
-                tab: prefs.tab,
+                // Developer aid: `AE30_TAB=live|scene|…` picks the first tab.
+                tab: std::env::var("AE30_TAB")
+                    .ok()
+                    .and_then(|t| Tab::from_key(&t))
+                    .unwrap_or(prefs.tab),
                 ..View::default()
             },
             started: false,

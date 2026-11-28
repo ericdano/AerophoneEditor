@@ -556,6 +556,18 @@ fn scene(
     img
 }
 
+/// A setlist for demo mode: some of the demo user scenes, as
+/// (bank select, Temporary Scene image) pairs.
+pub fn demo_setlist() -> Vec<((u8, u8, u8), Image)> {
+    [0u8, 2, 4, 1, 6]
+        .iter()
+        .map(|&i| {
+            let img = demo_scene(Area::TempScene, &DEMO_SCENES[usize::from(i)]);
+            ((USER_SCENE_MSB, 0, i), img)
+        })
+        .collect()
+}
+
 fn demo_scene(area: Area, d: &Demo) -> Image {
     let tones: Vec<(u8, u8, u8)> = d.tones.iter().filter_map(|n| find_tone(n)).collect();
     scene(area, d.name, &tones, d.reverb, d.chorus, d.delay, d.ifx)

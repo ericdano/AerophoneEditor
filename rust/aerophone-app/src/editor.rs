@@ -379,7 +379,20 @@ impl Editor {
     pub fn connect_demo(&mut self, waker: Option<Waker>) {
         self.disconnect();
         self.link = Some(Link::demo());
-        self.saved_playlist = Some(std::mem::take(&mut self.playlist));
+        // A ready-made setlist (never saved: it has no folder).
+        let mut demo = Playlist::default();
+        demo.lists[0].name = "Demo Gig".into();
+        demo.lists[0].entries = aerophone_core::sim::demo_setlist()
+            .into_iter()
+            .map(|(source, scene)| playlist::Entry {
+                scene,
+                source: Some(source),
+                slot: None,
+                changed: false,
+                stored: false,
+            })
+            .collect();
+        self.saved_playlist = Some(std::mem::replace(&mut self.playlist, demo));
         self.saved_presets = Some(std::mem::take(&mut self.preset_names));
         self.conn = Conn::Connecting;
         self.session.identify();
