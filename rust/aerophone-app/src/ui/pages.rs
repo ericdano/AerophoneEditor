@@ -1053,7 +1053,9 @@ pub fn tone(ui: &mut Ui, view: &mut View, ed: &mut Editor) {
     if !ed.image(t).is_loaded() {
         return not_loaded(ui, ed);
     }
-    // Header: name, save (buttons wrap below in narrow windows).
+    // Header: name, save (buttons wrap below in narrow windows). Measured
+    // before the row: inside a wrapping row the width says little.
+    let narrow = ui.available_width() < 600.0;
     theme::card(ui).show(ui, |ui| {
         ui.horizontal_wrapped(|ui| {
             let mut name = ed.image(t).scene_name().unwrap_or_default();
@@ -1066,7 +1068,6 @@ pub fn tone(ui: &mut Ui, view: &mut View, ed: &mut Editor) {
             if r.changed() {
                 ed.rename_tone(part, &name);
             }
-            let narrow = ui.available_width() < 360.0;
             if !narrow {
                 ui.label(RichText::new(ed.tone_label(part)).color(pal.weak));
             }
